@@ -2,6 +2,8 @@
 
 [English](README.md) | [한국어](README_ko.md)
 
+https://github.com/user-attachments/assets/9903ff79-d4fa-459b-bf72-b7c09f0b21f6
+
 프롬프트의 어떤 태그가 이미지의 어느 부분을 만들었는지 크로스 어텐션 히트맵([DAAM](https://arxiv.org/abs/2210.04885))으로 봅니다.
 
 > [!IMPORTANT]
