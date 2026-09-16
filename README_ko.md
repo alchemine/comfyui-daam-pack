@@ -26,10 +26,9 @@ git clone https://github.com/alchemine/comfyui-daam-pack
 
 ## 예제
 
-<video src="https://github.com/alchemine/comfyui-daam-pack/raw/main/assets/comfyui-daam-pack-example-v1.0.0.mp4"
-       controls muted loop width="900">
-  <a href="https://github.com/alchemine/comfyui-daam-pack/raw/main/assets/comfyui-daam-pack-example-v1.0.0.mp4">데모 영상 보기</a>
-</video>
+[![DAAM Tag Explorer](https://raw.githubusercontent.com/alchemine/comfyui-daam-pack/main/assets/comfyui-daam-pack-example-poster.jpg)](https://github.com/alchemine/comfyui-daam-pack/blob/main/assets/comfyui-daam-pack-example-v1.0.0.mp4)
+
+*[▶ 데모 영상 보기](https://github.com/alchemine/comfyui-daam-pack/blob/main/assets/comfyui-daam-pack-example-v1.0.0.mp4) (34초) — 호버, 태그 고정, mask 뷰.*
 
 [`workflows/comfyui-daam-pack-workflow.json`](workflows/comfyui-daam-pack-workflow.json)은 최소 구성의 SDXL 그래프입니다. 캔버스에
 끌어다 놓고 체크포인트만 고른 뒤 큐에 넣으면 됩니다.

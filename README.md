@@ -26,10 +26,9 @@ Then restart ComfyUI. No extra Python dependencies — `numpy`, `torch` and `Pil
 
 ## Example
 
-<video src="https://github.com/alchemine/comfyui-daam-pack/raw/main/assets/comfyui-daam-pack-example-v1.0.0.mp4"
-       controls muted loop width="900">
-  <a href="https://github.com/alchemine/comfyui-daam-pack/raw/main/assets/comfyui-daam-pack-example-v1.0.0.mp4">Watch the demo</a>
-</video>
+[![DAAM Tag Explorer](https://raw.githubusercontent.com/alchemine/comfyui-daam-pack/main/assets/comfyui-daam-pack-example-poster.jpg)](https://github.com/alchemine/comfyui-daam-pack/blob/main/assets/comfyui-daam-pack-example-v1.0.0.mp4)
+
+*[▶ Watch the demo](https://github.com/alchemine/comfyui-daam-pack/blob/main/assets/comfyui-daam-pack-example-v1.0.0.mp4) (34s) — hovering, pinning tags, and the mask view.*
 
 [`workflows/comfyui-daam-pack-workflow.json`](workflows/comfyui-daam-pack-workflow.json) is a minimal SDXL graph: drag it onto the
 canvas, pick a checkpoint, and queue it.
