@@ -7,9 +7,9 @@ See which prompt tag shaped which part of the image, via cross-attention heatmap
 > [!IMPORTANT]
 > **SDXL only.** The heatmaps are read out of the UNet's cross-attention blocks, which DiT models — Flux, SD3, Qwen-Image, Wan — do not have.
 
-[![DAAM Tag Explorer](assets/comfyui-daam-pack-example-poster.png)](https://github.com/alchemine/comfyui-daam-pack/blob/main/assets/comfyui-daam-pack-example-v1.0.0.mp4)
+[![DAAM Tag Explorer](assets/comfyui-daam-pack-example-poster.png)](assets/comfyui-daam-pack-example-v1.0.0.mp4)
 
-*[▶ Demo](https://github.com/alchemine/comfyui-daam-pack/blob/main/assets/comfyui-daam-pack-example-v1.0.0.mp4)*
+*[▶ Demo](assets/comfyui-daam-pack-example-v1.0.0.mp4)*
 
 ## Usage
 
