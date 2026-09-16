@@ -7,9 +7,7 @@
 > [!IMPORTANT]
 > **SDXL 전용입니다.** 히트맵은 UNet의 크로스 어텐션 블록에서 읽어냅니다. Flux, SD3, Qwen-Image, Wan 같은 DiT 모델에는 그 블록이 없습니다.
 
-[![DAAM Tag Explorer](assets/comfyui-daam-pack-example-poster.png)](assets/comfyui-daam-pack-example-v1.0.0.mp4)
-
-*[▶ 데모](assets/comfyui-daam-pack-example-v1.0.0.mp4)*
+![DAAM Tag Explorer](assets/comfyui-daam-pack-example-poster.png)
 
 ## 사용법
 
