@@ -1,0 +1,19 @@
+[project]
+name = "comfyui-daam-pack"
+description = """DAAM: cross-attention heatmap sampler and interactive per-tag explorer.
+Sampler Custom (DAAM): drop-in SamplerCustom that also returns pos/neg attention heatmaps (free when the heatmap outputs are unconnected).
+DAAM Tag Explorer: client-side per-tag attention viewer — hover for a live per-tag share chart, click to pin tags, heatmap/mask views, and a shape score per tag."""
+
+version = "1.0.0"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/alchemine/comfyui-daam-pack"
+"Bug Tracker" = "https://github.com/alchemine/comfyui-daam-pack/issues"
+
+[tool.comfy]
+PublisherId = "alchemine"
+DisplayName = "ComfyUI-DAAM-Pack"
+Icon = ""
