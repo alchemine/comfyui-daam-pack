@@ -4,9 +4,9 @@
 
 See which prompt tag shaped which part of the image, via cross-attention heatmaps ([DAAM](https://arxiv.org/abs/2210.04885)). SDXL only.
 
-[![DAAM Tag Explorer](assets/comfyui-daam-pack-example-poster.jpg)](https://github.com/alchemine/comfyui-daam-pack/blob/main/assets/comfyui-daam-pack-example-v1.0.0.mp4)
+[![DAAM Tag Explorer](assets/comfyui-daam-pack-example-poster.png)](https://github.com/alchemine/comfyui-daam-pack/blob/main/assets/comfyui-daam-pack-example-v1.0.0.mp4)
 
-*[▶ Demo](https://github.com/alchemine/comfyui-daam-pack/blob/main/assets/comfyui-daam-pack-example-v1.0.0.mp4) (34s)*
+*[▶ Demo](https://github.com/alchemine/comfyui-daam-pack/blob/main/assets/comfyui-daam-pack-example-v1.0.0.mp4) (1 min)*
 
 ## Usage
 
