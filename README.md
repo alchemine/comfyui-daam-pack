@@ -8,6 +8,33 @@ See which prompt tag shaped which part of the image, via cross-attention heatmap
 
 *[▶ Demo](https://github.com/alchemine/comfyui-daam-pack/blob/main/assets/comfyui-daam-pack-example-v1.0.0.mp4) (34s)*
 
+## Usage
+
+Everything happens inside the **DAAM Tag Explorer** node, between the image on the left and the tag list on the right.
+
+| Do this | Get this |
+|---------|----------|
+| **Hover the image** | Each tag's bar shows its share of the attention at that pixel. Blue is over 2/N, yellow over 1/N, for N tags |
+| **Click the image** | Selects the tag that dominates that pixel. Ctrl/Shift-click adds it to the selection instead of replacing it |
+| **Hover a tag** | Shows that tag's map while the pointer rests on it |
+| **Click a tag** | Pins it. Click more to pin several — they show at once, each at its own scale |
+| **Arrow keys** | Walk the list. `Enter` / `Space` pins, `Escape` clears |
+
+With the pointer off the image, the bars turn into a 0-to-1 score for **whether the tag gave the picture a shape** — a sharp peak or a cleanly bounded region both count. The scale is fixed rather than relative to the other tags, so a prompt where nothing scores high really did build nothing. Rows are sorted by it.
+
+| Control | What it does |
+|---------|--------------|
+| `strength` | How strongly the map is applied. 0 leaves the render untouched |
+| `smooth` | Blurs the map before it is drawn. 0 shows the raw attention cells |
+| `view: heatmap` | Jet colours over the image, 0 to 1 on the colorbar |
+| `view: mask` | The map becomes the image's visibility instead: what the tag looked at stays lit, the rest goes dark |
+
+## Example
+
+[`workflows/comfyui-daam-pack-workflow.json`](workflows/comfyui-daam-pack-workflow.json)
+
+![Workflow](workflows/comfyui-daam-pack-workflow.png)
+
 ## Installation
 
 Search for **ComfyUI-DAAM-Pack** in ComfyUI Manager, or:
@@ -17,28 +44,11 @@ cd ComfyUI/custom_nodes
 git clone https://github.com/alchemine/comfyui-daam-pack
 ```
 
-## Example
-
-[`workflows/comfyui-daam-pack-workflow.json`](workflows/comfyui-daam-pack-workflow.json)
-
-![Workflow](workflows/comfyui-daam-pack-workflow.png)
-
 ## Nodes (`DaamPack/DAAM`)
 
-### Sampler Custom (DAAM)
+**Sampler Custom (DAAM)** — `SamplerCustom` plus `pos_heatmaps` / `neg_heatmaps`, the per-token attention maps. Leave them unconnected and it costs what `SamplerCustom` costs.
 
-`SamplerCustom` plus two heatmap outputs. Leave them unconnected and it costs what `SamplerCustom` costs.
-
-| Input | Description |
-|-------|-------------|
-| same as `SamplerCustom` | `model`, `add_noise`, `noise_seed`, `cfg`, `positive`, `negative`, `sampler`, `sigmas`, `latent_image` |
-
-| Output | Description |
-|--------|-------------|
-| `output`, `denoised_output` | Same as `SamplerCustom` |
-| `pos_heatmaps` / `neg_heatmaps` | Per-token attention maps, for the explorer |
-
-### DAAM Tag Explorer
+**DAAM Tag Explorer** — the viewer above.
 
 | Input | Description |
 |-------|-------------|
@@ -46,20 +56,6 @@ git clone https://github.com/alchemine/comfyui-daam-pack
 | `text` | The prompt string, BREAK included. Must be the exact string the conditioning was encoded from — feed both from the same node, or the tags will not line up |
 | `heatmaps` | `pos_heatmaps` from Sampler Custom (DAAM) |
 | `images` | The decoded images |
-
-| Control | Description |
-|---------|-------------|
-| Hover the image | Bars show each tag's share of the attention at that point. Blue is over 2/N, yellow over 1/N, for N tags |
-| Click the image | Selects the tag that dominates that spot. Ctrl/Shift-click adds to the selection |
-| Point at a tag | Shows its map while the pointer rests there |
-| Click a tag | Pins it. Several pinned tags show at once, each at its own scale |
-| Arrow keys | Walk the list. `Enter` / `Space` pins, `Escape` clears |
-| `strength` | How strongly the map is applied. 0 leaves the render untouched |
-| `smooth` | Blurs the map before it is drawn. 0 shows the raw attention cells |
-| `view: heatmap` | Jet colours over the image, 0 to 1 on the colorbar |
-| `view: mask` | The map becomes the image's visibility instead: what the tag looked at stays lit, the rest goes dark |
-
-Bars with the pointer off the image are a 0-to-1 score for **whether the tag gave the picture a shape** — a sharp peak or a cleanly bounded region both count. The scale is fixed, not relative to the other tags, so a prompt where nothing scores high really did build nothing. Rows are sorted by it.
 
 ## License
 
