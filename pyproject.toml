@@ -1,10 +1,10 @@
 [project]
 name = "comfyui-daam-pack"
-description = """DAAM: cross-attention heatmap sampler and interactive per-tag explorer.
-Sampler Custom (DAAM): drop-in SamplerCustom that also returns pos/neg attention heatmaps (free when the heatmap outputs are unconnected).
-DAAM Tag Explorer: client-side per-tag attention viewer — hover for a live per-tag share chart, click to pin tags, heatmap/mask views, and a shape score per tag."""
+description = """Interactive tag attention explorer (SDXL only)
+Click a spot in the image → the related tag
+Click a tag → the related part of the image"""
 
-version = "1.0.0"
+version = "1.0.1"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = []
