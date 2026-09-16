@@ -2,6 +2,8 @@
 
 [English](README.md) | [한국어](README_ko.md)
 
+https://github.com/user-attachments/assets/9903ff79-d4fa-459b-bf72-b7c09f0b21f6
+
 See which prompt tag shaped which part of the image, via cross-attention heatmaps ([DAAM](https://arxiv.org/abs/2210.04885)).
 
 > [!IMPORTANT]
