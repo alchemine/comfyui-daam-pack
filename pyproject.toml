@@ -4,10 +4,23 @@ description = """Interactive tag attention explorer (SDXL only)
 Click a spot in the image → the related tag
 Click a tag → the related part of the image"""
 
-version = "1.0.1"
+version = "1.1.0"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = []
+
+[dependency-groups]
+# The pack runs inside ComfyUI, which provides these; they are only listed
+# here for the tests.
+test = ["pytest>=8", "torch", "numpy", "pillow", "aiohttp"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [project.urls]
 Repository = "https://github.com/alchemine/comfyui-daam-pack"

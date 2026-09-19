@@ -1,8 +1,7 @@
 """Cross attention capture (DAAM) and per tag exploration."""
 
+import io
 import math
-import os
-import random
 import re
 
 import numpy as np
@@ -12,8 +11,9 @@ import torch.nn.functional as F
 
 import comfy.sample
 import comfy.utils
-import folder_paths
 import latent_preview
+from aiohttp import web
+from server import PromptServer
 
 
 #################################################################
@@ -299,9 +299,11 @@ class CrossAttentionCollector:
         self.img_width = img_width
         self.enabled = {"pos": collect_pos, "neg": collect_neg}
 
-        # side -> batch_index -> (tokens, h, w) running sum, plus a count so the
-        # layers and timesteps can be averaged at the end. Accumulating in place
-        # keeps memory flat no matter how many steps are sampled.
+        # side -> batch_index -> tokens -> (tokens, h, w) running sum, plus a
+        # count so the layers and timesteps can be averaged at the end.
+        # Accumulating in place keeps memory flat no matter how many steps are
+        # sampled. Conditionings of different token lengths, e.g. one per
+        # timestep range, are different prompts and are kept apart.
         self.sums = {"pos": {}, "neg": {}}
         self.counts = {"pos": {}, "neg": {}}
 
@@ -393,24 +395,27 @@ class CrossAttentionCollector:
             tokens = probs.shape[-1]
             maps = maps.view(tokens, -1, self.map_h, self.map_w).mean(1)
 
-            store = self.sums[side]
-            if latent_index in store:
-                store[latent_index] += maps
+            store = self.sums[side].setdefault(latent_index, {})
+            if tokens in store:
+                store[tokens] += maps
             else:
-                store[latent_index] = maps
-            self.counts[side][latent_index] = self.counts[side].get(latent_index, 0) + 1
+                store[tokens] = maps
+            counts = self.counts[side].setdefault(latent_index, {})
+            counts[tokens] = counts.get(tokens, 0) + 1
 
     def heatmaps(self, side):
-        """{latent_index: tensor(tokens, map_h, map_w)}, or None when disabled."""
+        """{latent_index: {tokens: tensor(tokens, map_h, map_w)}}, or None when disabled."""
         if not self.enabled[side] or not self.sums[side]:
             return None
 
         return {
-            latent_index: (total / max(1, self.counts[side][latent_index]))
-            # Only now does this leave the GPU: doing it per block would sync
-            # on every attention layer of every step.
-            .cpu()
-            for latent_index, total in self.sums[side].items()
+            latent_index: {
+                # Only now does this leave the GPU: doing it per block would
+                # sync on every attention layer of every step.
+                tokens: (total / self.counts[side][latent_index][tokens]).cpu()
+                for tokens, total in by_tokens.items()
+            }
+            for latent_index, by_tokens in self.sums[side].items()
         }
 
 
@@ -597,15 +602,27 @@ class DAAMSamplerCustom:
         return out, out_denoised
 
 
+# Latest explorer result per node id, as (png bytes, npy bytes). Rerunning a
+# node replaces its entry, so this stays at one image per explorer node.
+EXPLORER_RESULTS = {}
+
+
+@PromptServer.instance.routes.get("/daam/tag_explorer/{kind}")
+async def get_explorer_result(request):
+    result = EXPLORER_RESULTS.get(request.query.get("node_id"))
+    if result is None:
+        return web.Response(status=404)
+    image, tag_maps = result
+    headers = {"Cache-Control": "no-store"}
+    if request.match_info["kind"] == "image":
+        return web.Response(body=image, content_type="image/png", headers=headers)
+    return web.Response(
+        body=tag_maps, content_type="application/octet-stream", headers=headers
+    )
+
+
 class DAAMTagExplorer:
     """Interactive per tag attention explorer."""
-
-    def __init__(self):
-        self.output_dir = folder_paths.get_temp_directory()
-        self.type = "temp"
-        self.prefix_append = "_temp_" + "".join(
-            random.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(5)
-        )
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -632,6 +649,7 @@ class DAAMTagExplorer:
                 ),
                 "images": ("IMAGE", {"tooltip": "The decoded images."}),
             },
+            "hidden": {"unique_id": "UNIQUE_ID"},
         }
 
     RETURN_TYPES = ()
@@ -644,7 +662,7 @@ class DAAMTagExplorer:
         "overlay their heatmap. Several pinned tags show as one map."
     )
 
-    def explore(self, clip, text, heatmaps, images):
+    def explore(self, clip, text, heatmaps, images, unique_id):
         if not heatmaps:
             raise RuntimeError(
                 "DAAM: no attention heat maps were collected during sampling. "
@@ -659,41 +677,49 @@ class DAAMTagExplorer:
                 + _split_diagnostics(clip, tokens)
             )
 
-        saved_images, saved_maps, structure, labels = [], [], [], []
+        # The heat maps of the conditioning this text was encoded into are the
+        # ones with its token count.
+        token_count = sum(len(section) for section in tokens[_tokenizer_key(tokens)])
+        collected = sorted({count for by_tokens in heatmaps.values() for count in by_tokens})
+        if token_count not in collected:
+            raise RuntimeError(
+                f"DAAM: 'text' is {token_count} tokens but the heat maps were "
+                f"collected for {collected} tokens. Connect the text of a "
+                "conditioning that was sampled."
+            )
 
+        # The panel draws the first image of the batch that has a heat map.
         for batch_index in range(images.shape[0]):
-            heat_map = heatmaps.get(batch_index)
+            heat_map = heatmaps.get(batch_index, {}).get(token_count)
             if heat_map is None:
                 continue
+            labels, maps = self._tag_maps(tags, heat_map)
+            if maps:
+                break
+        else:
+            return {"ui": {"tag_key": [], "tags": [], "tag_structure": []}}
 
-            batch_labels, maps = self._tag_maps(tags, heat_map)
-            if not maps:
-                continue
-            labels = batch_labels
+        # Shipped at their native grid (image/16) for the browser to upscale:
+        # full resolution maps for every tag would be hundreds of megabytes,
+        # while this is a few hundred kilobytes and lets the bar chart and the
+        # overlay update without a server round trip.
+        stacked = torch.stack(maps, 0).detach().cpu().numpy().astype(np.float32)
 
-            # Shipped at their native grid (image/16) for the browser to
-            # upscale: full resolution maps for every tag would be hundreds of
-            # megabytes, while this is a few hundred kilobytes and lets the bar
-            # chart and the overlay update without a server round trip.
-            stacked = torch.stack(maps, 0).detach().cpu().numpy().astype(np.float32)
-
-            # The panel draws the first image of the batch, so that is the one
-            # whose structure scores it needs.
-            if not structure:
-                structure = structure_scores(stacked)
-
-            image = images[batch_index]
-            saved_images.append(self._save_image(image, batch_index))
-            saved_maps.append(self._save_tag_maps(stacked, image, batch_index))
+        image_bytes, map_bytes = io.BytesIO(), io.BytesIO()
+        array = (255.0 * images[batch_index].cpu().numpy()).clip(0, 255)
+        Image.fromarray(array.astype(np.uint8)).save(
+            image_bytes, format="PNG", compress_level=1
+        )
+        np.save(map_bytes, stacked)
+        EXPLORER_RESULTS[unique_id] = (image_bytes.getvalue(), map_bytes.getvalue())
 
         # Deliberately not "images": that key makes ComfyUI render its own
         # preview under the node, duplicating the canvas we draw ourselves.
         return {
             "ui": {
-                "tag_images": saved_images,
-                "tag_maps": saved_maps,
+                "tag_key": [unique_id],
                 "tags": labels,
-                "tag_structure": structure,
+                "tag_structure": structure_scores(stacked),
             }
         }
 
@@ -709,29 +735,3 @@ class DAAMTagExplorer:
                 labels.append(tag)
                 maps.append(heat_map[valid].mean(0))
         return labels, maps
-
-    def _save_path(self, image, batch_index, suffix):
-        prefix = "DAAMTagExplorer" + self.prefix_append
-        full_output_folder, filename, counter, subfolder, _ = (
-            folder_paths.get_save_image_path(
-                prefix, self.output_dir, image.shape[1], image.shape[0]
-            )
-        )
-        name = filename.replace("%batch_num%", str(batch_index))
-        file = f"{name}_{counter:05}{suffix}"
-        return os.path.join(full_output_folder, file), {
-            "filename": file,
-            "subfolder": subfolder,
-            "type": "temp",
-        }
-
-    def _save_image(self, image, batch_index):
-        path, entry = self._save_path(image, batch_index, ".png")
-        array = (255.0 * image.cpu().numpy()).clip(0, 255).astype(np.uint8)
-        Image.fromarray(array).save(path, compress_level=1)
-        return entry
-
-    def _save_tag_maps(self, stacked, image, batch_index):
-        path, entry = self._save_path(image, batch_index, "_tagmaps.npy")
-        np.save(path, stacked)
-        return entry
