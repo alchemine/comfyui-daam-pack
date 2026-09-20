@@ -46,6 +46,8 @@
 실행 방법:
 
 ```bash
+uv venv
+uv pip install -r tests/requirements.txt
 .venv/bin/python -m pytest -c tests/pytest.ini tests
 ```
 

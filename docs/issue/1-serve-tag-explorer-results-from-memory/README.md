@@ -38,7 +38,9 @@ explorer 노드별로 최신 결과 하나만 메모리에 두고, 팩의 라우
 실행 방법:
 
 ```bash
-uv run --group test pytest -c tests/pytest.ini tests
+uv venv
+uv pip install -r tests/requirements.txt
+.venv/bin/python -m pytest -c tests/pytest.ini tests
 ```
 
 ## 테스트 결과
