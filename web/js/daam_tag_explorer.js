@@ -235,15 +235,11 @@ function sliderRow(name, value, onInput) {
     };
 }
 
-function viewUrl(entry) {
-    const { filename, subfolder, type } = entry || {};
-    if (!filename) return null;
-    // api.apiURL applies the server's base path and auth, which a bare "/view"
+function resultUrl(kind, key) {
+    // api.apiURL applies the server's base path and auth, which a bare path
     // string does not.
     return api.apiURL(
-        `/view?filename=${encodeURIComponent(filename)}&type=${type}&subfolder=${encodeURIComponent(
-            subfolder || ""
-        )}`
+        `/daam/tag_explorer/${kind}?node_id=${encodeURIComponent(key)}`
     );
 }
 
@@ -506,16 +502,15 @@ class TagExplorerView {
     }
 
     async setData(message) {
-        const tagMapEntry = (message?.tag_maps || [])[0];
-        const imageEntry = (message?.tag_images || [])[0];
+        const key = (message?.tag_key || [])[0];
         this.tags = message?.tags || [];
         this.structure = message?.tag_structure || [];
 
-        if (tagMapEntry) {
+        if (key !== undefined) {
             try {
-                // Same URL the <img> uses; rebuilding it for fetchApi only
-                // risks doubling or dropping the API base path.
-                const response = await fetch(viewUrl(tagMapEntry));
+                // Same URL form the <img> uses; rebuilding it for fetchApi
+                // only risks doubling or dropping the API base path.
+                const response = await fetch(resultUrl("maps", key));
                 if (!response.ok) {
                     throw new Error(`status ${response.status}`);
                 }
@@ -530,9 +525,14 @@ class TagExplorerView {
             }
         }
 
-        this.image = imageEntry ? await this.loadImage(viewUrl(imageEntry)) : null;
-        if (imageEntry && !this.image) {
-            console.error("DAAM: failed to load image", viewUrl(imageEntry));
+        // The URL is the same on every run, so the run counter keeps the
+        // <img> from reusing the previous picture.
+        this.run = (this.run || 0) + 1;
+        const imageUrl =
+            key !== undefined ? `${resultUrl("image", key)}&run=${this.run}` : null;
+        this.image = imageUrl ? await this.loadImage(imageUrl) : null;
+        if (imageUrl && !this.image) {
+            console.error("DAAM: failed to load image", imageUrl);
         }
 
         this.selected.clear();

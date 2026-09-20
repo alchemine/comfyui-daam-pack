@@ -1,0 +1,8 @@
+# ComfyUI itself provides everything but `pytest`, so they are only listed here
+# for the tests.
+--extra-index-url https://download.pytorch.org/whl/cpu
+pytest>=8
+torch
+numpy
+pillow
+aiohttp
