@@ -29,7 +29,7 @@ uv pip install --python .venv/bin/python -r tests/requirements.txt
 ```
 
 ## 테스트 결과
-| | 수정 전 (`b10badf`) |
-|---|---|
-| 배포 zip | 파일 25개 가운데 `docs/` 3개, `tests/` 6개 |
-| pytest | 1 failed, 10 passed |
+| | 수정 전 (`b10badf`) | 수정 후 |
+|---|---|---|
+| 배포 zip | 파일 25개 가운데 `docs/` 3개, `tests/` 6개 | 파일 16개, `docs/`와 `tests/`는 0개 |
+| pytest | 1 failed, 10 passed | 11 passed |
