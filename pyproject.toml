@@ -7,7 +7,6 @@ Click a tag → the related part of the image"""
 version = "1.1.0"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
-dependencies = []
 
 [dependency-groups]
 # The pack runs inside ComfyUI, which provides these; they are only listed
@@ -30,3 +29,20 @@ Repository = "https://github.com/alchemine/comfyui-daam-pack"
 PublisherId = "alchemine"
 DisplayName = "ComfyUI-DAAM-Pack"
 Icon = ""
+
+[tool.ruff]
+lint.select = [
+  "N805", # invalid-first-argument-name-for-method
+  "S307", # suspicious-eval-usage
+  "S102", # exec
+  "E",
+  "T",    # print-usage
+  "W",
+  # The "F" series in Ruff stands for "Pyflakes" rules, which catch various Python syntax errors and undefined names.
+  # See all rules here: https://docs.astral.sh/ruff/rules/#pyflakes-f
+  "F",
+]
+
+lint.ignore = ["E501", "E722", "E731", "E712", "E402", "E741"]
+
+exclude = ["*.ipynb"]

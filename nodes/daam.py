@@ -1,6 +1,7 @@
 """Cross attention capture (DAAM) and per tag exploration."""
 
 import io
+import logging
 import math
 import re
 
@@ -353,7 +354,7 @@ class CrossAttentionCollector:
         try:
             self._collect(probs, extra_options.get("cond_or_uncond", [0]))
         except Exception as error:  # never break sampling over a heat map
-            print(f"[DAAM] attention collection skipped: {error}")
+            logging.warning(f"[DAAM] attention collection skipped: {error}")
 
         return out
 
