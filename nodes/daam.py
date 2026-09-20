@@ -678,7 +678,9 @@ class DAAMTagExplorer:
         # The heat maps of the conditioning this text was encoded into are the
         # ones with its token count.
         token_count = sum(len(section) for section in tokens[_tokenizer_key(tokens)])
-        collected = sorted({count for by_tokens in heatmaps.values() for count in by_tokens})
+        collected = sorted(
+            {count for by_tokens in heatmaps.values() for count in by_tokens}
+        )
         if token_count not in collected:
             raise RuntimeError(
                 f"DAAM: 'text' is {token_count} tokens but the heat maps were "
