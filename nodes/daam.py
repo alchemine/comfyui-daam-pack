@@ -112,7 +112,7 @@ def split_tags(clip, tokens: dict) -> list:
     names = iter(tokens.get(EMBEDDING_NAMES_KEY) or [])
 
     tags = []
-    idxs, text, depth, in_embedding, index = [], "", 0, False, -1
+    idxs, text, in_embedding, index = [], "", False, -1
 
     def flush():
         nonlocal idxs, text
@@ -142,9 +142,7 @@ def split_tags(clip, tokens: dict) -> list:
             in_embedding = False
             if token_id in special:
                 continue
-            # A comma separates tags only at the top level: inside a weight
-            # group like "(a,b:-1)" it belongs to the tag.
-            if token_id in separators and depth == 0:
+            if token_id in separators:
                 flush()
                 continue
 
@@ -152,11 +150,10 @@ def split_tags(clip, tokens: dict) -> list:
             piece = inv_vocab.get(token_id, "").replace("</w>", " ")
             text += piece
 
-            depth = max(0, depth + piece.count("(") - piece.count(")"))
             # BPE glues a comma onto the preceding character, so ")," is a
             # single token the separator ids never match. Close on the decoded
-            # text instead, once the parens it opened are balanced again.
-            if depth == 0 and piece.strip().endswith(","):
+            # text instead.
+            if piece.strip().endswith(","):
                 flush()
 
         # A tag never spans two 77 token chunks: the boundary ends it.
