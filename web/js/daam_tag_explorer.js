@@ -503,6 +503,9 @@ class TagExplorerView {
 
     async setData(message) {
         const key = (message?.tag_key || [])[0];
+        // Pins follow the tag name into the next run; the indices do not
+        // survive a prompt edit.
+        const pinned = new Set([...this.selected].map((index) => this.tags[index]));
         this.tags = message?.tags || [];
         this.structure = message?.tag_structure || [];
 
@@ -535,7 +538,9 @@ class TagExplorerView {
             console.error("DAAM: failed to load image", imageUrl);
         }
 
-        this.selected.clear();
+        this.selected = new Set(
+            this.tags.flatMap((tag, index) => (pinned.has(tag) ? [index] : [])),
+        );
         this.buildRows();
         this.draw();
         this.updateBars(null);
