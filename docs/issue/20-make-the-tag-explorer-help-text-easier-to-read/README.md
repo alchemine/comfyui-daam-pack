@@ -39,3 +39,21 @@ tag: point to see its influence, click to keep it on
 | 문구 | 노드를 실행한다 | 위 문구가 줄바꿈과 들여쓰기를 지킨 채 보이고, `:` 앞의 이름만 굵다 |
 | 상태 문구 | 실행 전 노드를 본다 | `Run the node to load tags.`가 굵은 글씨 없이 보인다 |
 | 문구 조립 | `quickjs`로 안내 영역에 들어가는 요소를 확인한다 | 줄마다 `<b>이름</b>`과 설명이 위 문구 순서대로 들어간다 |
+
+## 테스트 결과
+
+이 환경에는 브라우저가 없어서 브라우저 확인은 하지 못했다.
+`quickjs`로 `showHelp()`를 실행해 안내 영역에 들어가는 요소를 확인했다.
+
+```
+<b>strength</b>: how strongly the influence shows
+<b>smooth</b>: how soft the influence looks
+<b>view</b>: heatmap or mask
+  - <b>heatmap</b>: red for more influence, blue for less (overlay)
+  - <b>mask</b>: darker for less influence
+<b>bar</b>: how much each tag influenced the image (3 levels)
+<b>image</b>: point at it to see which tags influenced that spot
+<b>tag</b>: point to see its influence, click to keep it on
+```
+
+기존 `pytest` 15개는 수정 전후 모두 통과한다.

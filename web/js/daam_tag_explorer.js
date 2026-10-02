@@ -31,17 +31,17 @@ const OVERLAY_ALPHA = 0.5;
 // both "the default look", and neither is a good default for the other.
 const MASK_ALPHA = 1.0;
 
+// [indent, name, description]; the name is drawn bold.
 const HELP_TEXT = [
-    "strength: overlay opacity",
-    "smooth: blur the map before colouring",
-    "view",
-    "  - heatmap: jet colours over the image",
-    "  - mask: the map dims the image",
-    "bar: how clearly the tag shaped the image",
-    "  - blue \u2265 0.5, yellow > 0, grey 0",
-    "  - hovering the image: the tag's share there",
-    "tag: point to see its map, click to pin",
-].join("\n");
+    ["", "strength", "how strongly the influence shows"],
+    ["", "smooth", "how soft the influence looks"],
+    ["", "view", "heatmap or mask"],
+    ["  - ", "heatmap", "red for more influence, blue for less (overlay)"],
+    ["  - ", "mask", "darker for less influence"],
+    ["", "bar", "how much each tag influenced the image (3 levels)"],
+    ["", "image", "point at it to see which tags influenced that spot"],
+    ["", "tag", "point to see its influence, click to keep it on"],
+];
 
 // selectedMap() min-max normalises, so the overlay always spans exactly this
 // range and the colour bar can label its ends with fixed numbers.
@@ -659,9 +659,8 @@ class TagExplorerView {
         if (!this.image) {
             this.hint.textContent = "Could not load the image (see console).";
         } else {
-            this.hint.textContent = this.tags.length
-                ? HELP_TEXT
-                : "No tags found.";
+            this.hint.textContent = this.tags.length ? "" : "No tags found.";
+            if (this.tags.length) this.showHelp();
         }
 
         // Strongest first: the tags worth looking at should not be buried
@@ -765,6 +764,14 @@ class TagExplorerView {
             this.rows[index].row.style.display = shown.has(index) ? "" : "none";
         }
         this.cursor = -1;
+    }
+
+    showHelp() {
+        HELP_TEXT.forEach(([indent, name, description], line) => {
+            const bold = document.createElement("b");
+            bold.textContent = name;
+            this.hint.append(line ? `\n${indent}` : indent, bold, `: ${description}`);
+        });
     }
 
     toggle(index) {
