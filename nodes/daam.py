@@ -32,6 +32,9 @@ EMBEDDING_TEXT = "[emb]"
 # Tokenizing replaces "embedding:name" with raw vectors, which drops the name,
 # so tokenize_break() stashes the names under a key no tokenizer stream uses.
 EMBEDDING_NAMES_KEY = "_daam_embedding_names"
+# Decoding drops the escapes, case and spacing of the prompt, so the labels are
+# looked up in the prompt text kept under this key.
+PROMPT_TEXT_KEY = "_daam_prompt_text"
 
 # Keyword that starts a new 77 token chunk, as in ComfyUI-ppm.
 BREAK_SEPARATOR = "BREAK"
@@ -94,7 +97,20 @@ def tokenize_break(clip, text: str) -> dict:
 
     if embedding_names:
         tokens_out[EMBEDDING_NAMES_KEY] = embedding_names
+    tokens_out[PROMPT_TEXT_KEY] = text
     return tokens_out
+
+
+def _find_in_prompt(label: str, text: str, start: int):
+    """Find `label` in the prompt from `start` as (span_start, span_end).
+
+    The decoded label has none of the prompt's spacing, escapes or case, so its
+    characters are matched with whitespace and backslashes allowed in between.
+    """
+    chars = [re.escape(char) for char in label if not char.isspace()]
+    pattern = r"\\?" + r"[\s\\]*".join(chars)
+    match = re.compile(pattern, re.IGNORECASE).search(text, start)
+    return match.span() if match else None
 
 
 def split_tags(clip, tokens: dict) -> list:
@@ -111,16 +127,21 @@ def split_tags(clip, tokens: dict) -> list:
 
     inv_vocab = _inv_vocab(clip, key)
     names = iter(tokens.get(EMBEDDING_NAMES_KEY) or [])
+    prompt = tokens.get(PROMPT_TEXT_KEY, "")
+    cursor = 0
 
     tags = []
     idxs, text, in_embedding, index = [], "", False, -1
 
     def flush():
-        nonlocal idxs, text
+        nonlocal idxs, text, cursor
         if idxs:
             # Fall back to positions so a token the vocabulary cannot name does
             # not make the tag disappear entirely.
             tag = text.strip().rstrip(",").strip() or f"tokens {idxs[0]}-{idxs[-1]}"
+            span = _find_in_prompt(tag, prompt, cursor)
+            if span:
+                tag, cursor = prompt[span[0] : span[1]], span[1]
             tags.append((tag, idxs))
         idxs, text = [], ""
 
