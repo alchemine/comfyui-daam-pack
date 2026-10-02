@@ -39,3 +39,21 @@
 | 고정 유지 | 태그를 고정하고, 그 태그가 숨도록 검색한다 | 히트맵에 계속 그려지고, 검색어를 지우면 고정된 채로 보인다 |
 | 화살표 키 | 검색한 뒤 목록에서 위아래 키를 누른다 | 보이는 태그 사이에서만 움직인다 |
 | 다음 생성 | 검색어를 둔 채 다시 생성한다 | 검색어와 결과가 유지된다 |
+
+## 테스트 결과
+
+이 환경에는 브라우저와 `node`가 없어서 위 표의 브라우저 확인은 하지 못했다.
+대신 `quickjs`로 `TagExplorerView.applySearch()`만 떼어 돌렸다. 태그는
+`Simple Background`, `white background`, `oil painting \(medium\)`,
+`see-through` 순으로 보이고 `white background`가 고정되어 있다.
+
+| 검색어 | 보이는 태그 | 테두리 | 고정 |
+|---|---|---|---|
+| (빈 칸) | 4개 모두 | 기본 | 유지 |
+| `background` | `Simple Background`, `white background` | 기본 | 유지 |
+| `^see-` | `see-through` | 기본 | 유지 |
+| `\(medium` | `oil painting \(medium\)` | 기본 | 유지 |
+| `(` | 4개 모두 | 빨강 | 유지 |
+| `zzz` | 없음 | 기본 | 유지 |
+
+기존 `pytest` 15개는 수정 전후 모두 통과한다.

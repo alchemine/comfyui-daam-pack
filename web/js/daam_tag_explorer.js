@@ -275,6 +275,9 @@ class TagExplorerView {
         // than into the tag axis: the list is sorted, the tags are not.
         this.cursor = -1;
         this.order = [];
+        // Every row in display order; this.order is the part the search shows.
+        this.sorted = [];
+        this.query = "";
         this.structure = [];
         this.selected = new Set();
         this.image = null;
@@ -429,6 +432,30 @@ class TagExplorerView {
         viewButton.addEventListener("pointerdown", (e) => e.stopPropagation());
         this.panel.appendChild(viewButton);
 
+        this.search = document.createElement("input");
+        this.search.type = "text";
+        this.search.placeholder = "search (regex)";
+        Object.assign(this.search.style, {
+            width: "100%",
+            boxSizing: "border-box",
+            marginBottom: "6px",
+            padding: "3px 5px",
+            background: "#2a2a2a",
+            color: "#ccc",
+            border: "1px solid #3a3a3a",
+            borderRadius: "3px",
+            font: "inherit",
+        });
+        this.search.addEventListener("input", () => {
+            this.query = this.search.value;
+            this.applySearch();
+            this.paintSelection();
+        });
+        // Typing is for the box: space and Enter would otherwise pin, and the
+        // graph would take the rest as shortcuts.
+        this.search.addEventListener("keydown", (e) => e.stopPropagation());
+        this.panel.appendChild(this.search);
+
         this.list = document.createElement("div");
         this.panel.appendChild(this.list);
 
@@ -447,6 +474,7 @@ class TagExplorerView {
         // Arrow keys walk the list. The widget takes focus as soon as the
         // pointer is over it, so the keys work without a click first.
         container.addEventListener("pointerenter", () => {
+            if (document.activeElement === this.search) return;
             container.focus({ preventScroll: true });
         });
         container.addEventListener("keydown", (e) => {
@@ -629,8 +657,7 @@ class TagExplorerView {
         const score = (index) => this.structure[index] ?? -Infinity;
         if (this.structure.length) order.sort((a, b) => score(b) - score(a));
 
-        this.order = order;
-        this.cursor = -1;
+        this.sorted = order;
         this.rows = new Array(this.tags.length);
         for (const index of order) {
             const tag = this.tags[index];
@@ -687,7 +714,7 @@ class TagExplorerView {
             // several tags can be shown together.
             row.addEventListener("mouseenter", () => {
                 this.preview = index;
-                this.cursor = order.indexOf(index);
+                this.cursor = this.order.indexOf(index);
                 this.paintSelection();
                 this.draw();
             });
@@ -705,7 +732,26 @@ class TagExplorerView {
             this.rows[index] = { row, bar, label, value };
         }
 
+        this.applySearch();
         this.paintSelection();
+    }
+
+    /** Show only the rows whose tag matches the search; pins are untouched. */
+    applySearch() {
+        let pattern = null;
+        try {
+            pattern = new RegExp(this.query, "i");
+        } catch {
+            // Show everything while the pattern is still being typed.
+        }
+        this.search.style.borderColor = pattern ? "#3a3a3a" : "#c05050";
+
+        this.order = this.sorted.filter((index) => !pattern || pattern.test(this.tags[index]));
+        const shown = new Set(this.order);
+        for (const index of this.sorted) {
+            this.rows[index].row.style.display = shown.has(index) ? "" : "none";
+        }
+        this.cursor = -1;
     }
 
     toggle(index) {
