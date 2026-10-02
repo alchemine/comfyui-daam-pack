@@ -53,3 +53,17 @@ uv venv
 uv pip install -r tests/requirements.txt
 .venv/bin/python -m pytest -c tests/pytest.ini tests
 ```
+
+## 테스트 결과
+
+| 테스트 | 수정 전 (`5b1e131`) | 수정 후 |
+|---|---|---|
+| `test_labels_keep_the_prompt_text` | 실패: `PROMPT_TEXT_KEY`가 없다 | 통과 |
+| `test_a_leading_escape_stays_on_the_label` | 실패: `PROMPT_TEXT_KEY`가 없다 | 통과 |
+| `test_labels_follow_the_prompt_across_break` | 실패: `PROMPT_TEXT_KEY`가 없다 | 통과 |
+| `test_a_label_missing_from_the_prompt_stays_decoded` | 실패: `PROMPT_TEXT_KEY`가 없다 | 통과 |
+| 합계 (기존 테스트 11개 포함) | 4 failed, 11 passed | 15 passed |
+
+실제 SDXL 토크나이저로 `tokenize_break()`와 `split_tags()`를 함께 돌려서도
+확인했다. `meteorite \(arknights\)`, `Torn see-through kneehighs`, `>:\(`,
+`oil painting \(medium\)`이 원문 그대로 나온다.
