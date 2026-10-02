@@ -31,6 +31,18 @@ const OVERLAY_ALPHA = 0.5;
 // both "the default look", and neither is a good default for the other.
 const MASK_ALPHA = 1.0;
 
+const HELP_TEXT = [
+    "strength: overlay opacity",
+    "smooth: blur the map before colouring",
+    "view",
+    "  - heatmap: jet colours over the image",
+    "  - mask: the map dims the image",
+    "bar: how clearly the tag shaped the image",
+    "  - blue \u2265 0.5, yellow > 0, grey 0",
+    "  - hovering the image: the tag's share there",
+    "tag: point to see its map, click to pin",
+].join("\n");
+
 // selectedMap() min-max normalises, so the overlay always spans exactly this
 // range and the colour bar can label its ends with fixed numbers.
 const OVERLAY_MIN = 0;
@@ -387,6 +399,7 @@ class TagExplorerView {
             color: "#888",
             marginBottom: "6px",
             lineHeight: "1.3",
+            whiteSpace: "pre-wrap",
         });
         this.panel.appendChild(this.hint);
 
@@ -647,7 +660,7 @@ class TagExplorerView {
             this.hint.textContent = "Could not load the image (see console).";
         } else {
             this.hint.textContent = this.tags.length
-                ? "Bars say whether a tag gave the picture a shape, sharply or broadly, against fixed thresholds rather than against each other. Point at a tag to see its map, click to pin."
+                ? HELP_TEXT
                 : "No tags found.";
         }
 
