@@ -34,8 +34,6 @@ With the pointer off the image, the bars turn into a 0-to-1 score for **whether 
 
 ## Example
 
-[`workflows/comfyui-daam-pack-workflow.json`](workflows/comfyui-daam-pack-workflow.json)
-
 ![Workflow](workflows/comfyui-daam-pack-workflow.png)
 
 ## Installation
