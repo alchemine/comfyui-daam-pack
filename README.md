@@ -23,7 +23,7 @@ Everything happens inside the **DAAM Tag Explorer** node, between the image on t
 | **Click a tag** | Pins it. Click more to pin several — they show at once, each at its own scale |
 | **Arrow keys** | Walk the list. `Enter` / `Space` pins, `Escape` clears |
 
-With the pointer off the image, the bars turn into a 0-to-1 score for **whether the tag gave the picture a shape** — a sharp peak or a cleanly bounded region both count. The scale is fixed rather than relative to the other tags, so a prompt where nothing scores high really did build nothing. Rows are sorted by it.
+With the pointer off the image, the bars turn into a 0-to-1 score for **whether the tag's attention gathers in one place**: red that forms a few islands on a blue background scores high however large the islands are, while red sprinkled over the picture or spread over most of it scores low. The scale is fixed rather than relative to the other tags, so a prompt where nothing scores high really did build nothing. Rows are sorted by it.
 
 | Control | What it does |
 |---------|--------------|
@@ -33,8 +33,6 @@ With the pointer off the image, the bars turn into a 0-to-1 score for **whether 
 | `view: mask` | The map becomes the image's visibility instead: what the tag looked at stays lit, the rest goes dark |
 
 ## Example
-
-[`workflows/comfyui-daam-pack-workflow.json`](workflows/comfyui-daam-pack-workflow.json)
 
 ![Workflow](workflows/comfyui-daam-pack-workflow.png)
 

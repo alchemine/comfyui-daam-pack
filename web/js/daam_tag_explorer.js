@@ -31,6 +31,18 @@ const OVERLAY_ALPHA = 0.5;
 // both "the default look", and neither is a good default for the other.
 const MASK_ALPHA = 1.0;
 
+// [indent, name, description]; the name is drawn bold.
+const HELP_TEXT = [
+    ["", "strength", "overlay strength"],
+    ["", "smooth", "overlay softness"],
+    ["", "view", "heatmap or mask"],
+    ["  - ", "heatmap", "red ↑, blue ↓"],
+    ["  - ", "mask", "dark ↓"],
+    ["", "bar", "attention focus"],
+    ["", "image", "hover to see tags there"],
+    ["", "tag", "hover to show, click to pin"],
+];
+
 // selectedMap() min-max normalises, so the overlay always spans exactly this
 // range and the colour bar can label its ends with fixed numbers.
 const OVERLAY_MIN = 0;
@@ -275,6 +287,9 @@ class TagExplorerView {
         // than into the tag axis: the list is sorted, the tags are not.
         this.cursor = -1;
         this.order = [];
+        // Every row in display order; this.order is the part the search shows.
+        this.sorted = [];
+        this.query = "";
         this.structure = [];
         this.selected = new Set();
         this.image = null;
@@ -384,6 +399,7 @@ class TagExplorerView {
             color: "#888",
             marginBottom: "6px",
             lineHeight: "1.3",
+            whiteSpace: "pre-wrap",
         });
         this.panel.appendChild(this.hint);
 
@@ -429,6 +445,30 @@ class TagExplorerView {
         viewButton.addEventListener("pointerdown", (e) => e.stopPropagation());
         this.panel.appendChild(viewButton);
 
+        this.search = document.createElement("input");
+        this.search.type = "text";
+        this.search.placeholder = "search (regex)";
+        Object.assign(this.search.style, {
+            width: "100%",
+            boxSizing: "border-box",
+            marginBottom: "6px",
+            padding: "3px 5px",
+            background: "#2a2a2a",
+            color: "#ccc",
+            border: "1px solid #3a3a3a",
+            borderRadius: "3px",
+            font: "inherit",
+        });
+        this.search.addEventListener("input", () => {
+            this.query = this.search.value;
+            this.applySearch();
+            this.paintSelection();
+        });
+        // Typing is for the box: space and Enter would otherwise pin, and the
+        // graph would take the rest as shortcuts.
+        this.search.addEventListener("keydown", (e) => e.stopPropagation());
+        this.panel.appendChild(this.search);
+
         this.list = document.createElement("div");
         this.panel.appendChild(this.list);
 
@@ -447,6 +487,7 @@ class TagExplorerView {
         // Arrow keys walk the list. The widget takes focus as soon as the
         // pointer is over it, so the keys work without a click first.
         container.addEventListener("pointerenter", () => {
+            if (document.activeElement === this.search) return;
             container.focus({ preventScroll: true });
         });
         container.addEventListener("keydown", (e) => {
@@ -503,6 +544,9 @@ class TagExplorerView {
 
     async setData(message) {
         const key = (message?.tag_key || [])[0];
+        // Pins follow the tag name into the next run; the indices do not
+        // survive a prompt edit.
+        const pinned = new Set([...this.selected].map((index) => this.tags[index]));
         this.tags = message?.tags || [];
         this.structure = message?.tag_structure || [];
 
@@ -535,7 +579,9 @@ class TagExplorerView {
             console.error("DAAM: failed to load image", imageUrl);
         }
 
-        this.selected.clear();
+        this.selected = new Set(
+            this.tags.flatMap((tag, index) => (pinned.has(tag) ? [index] : [])),
+        );
         this.buildRows();
         this.draw();
         this.updateBars(null);
@@ -613,9 +659,8 @@ class TagExplorerView {
         if (!this.image) {
             this.hint.textContent = "Could not load the image (see console).";
         } else {
-            this.hint.textContent = this.tags.length
-                ? "Bars say whether a tag gave the picture a shape, sharply or broadly, against fixed thresholds rather than against each other. Point at a tag to see its map, click to pin."
-                : "No tags found.";
+            this.hint.textContent = this.tags.length ? "" : "No tags found.";
+            if (this.tags.length) this.showHelp();
         }
 
         // Strongest first: the tags worth looking at should not be buried
@@ -624,8 +669,7 @@ class TagExplorerView {
         const score = (index) => this.structure[index] ?? -Infinity;
         if (this.structure.length) order.sort((a, b) => score(b) - score(a));
 
-        this.order = order;
-        this.cursor = -1;
+        this.sorted = order;
         this.rows = new Array(this.tags.length);
         for (const index of order) {
             const tag = this.tags[index];
@@ -682,7 +726,7 @@ class TagExplorerView {
             // several tags can be shown together.
             row.addEventListener("mouseenter", () => {
                 this.preview = index;
-                this.cursor = order.indexOf(index);
+                this.cursor = this.order.indexOf(index);
                 this.paintSelection();
                 this.draw();
             });
@@ -700,7 +744,34 @@ class TagExplorerView {
             this.rows[index] = { row, bar, label, value };
         }
 
+        this.applySearch();
         this.paintSelection();
+    }
+
+    /** Show only the rows whose tag matches the search; pins are untouched. */
+    applySearch() {
+        let pattern = null;
+        try {
+            pattern = new RegExp(this.query, "i");
+        } catch {
+            // Show everything while the pattern is still being typed.
+        }
+        this.search.style.borderColor = pattern ? "#3a3a3a" : "#c05050";
+
+        this.order = this.sorted.filter((index) => !pattern || pattern.test(this.tags[index]));
+        const shown = new Set(this.order);
+        for (const index of this.sorted) {
+            this.rows[index].row.style.display = shown.has(index) ? "" : "none";
+        }
+        this.cursor = -1;
+    }
+
+    showHelp() {
+        HELP_TEXT.forEach(([indent, name, description], line) => {
+            const bold = document.createElement("b");
+            bold.textContent = name;
+            this.hint.append(line ? `\n${indent}` : indent, bold, `: ${description}`);
+        });
     }
 
     toggle(index) {
