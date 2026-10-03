@@ -33,14 +33,14 @@ const MASK_ALPHA = 1.0;
 
 // [indent, name, description]; the name is drawn bold.
 const HELP_TEXT = [
-    ["", "strength", "how strongly the influence shows"],
-    ["", "smooth", "how soft the influence looks"],
+    ["", "strength", "overlay strength"],
+    ["", "smooth", "overlay softness"],
     ["", "view", "heatmap or mask"],
-    ["  - ", "heatmap", "red for more influence, blue for less (overlay)"],
-    ["  - ", "mask", "darker for less influence"],
-    ["", "bar", "how much each tag influenced the image (3 levels)"],
-    ["", "image", "point at it to see which tags influenced that spot"],
-    ["", "tag", "point to see its influence, click to keep it on"],
+    ["  - ", "heatmap", "red more, blue less"],
+    ["  - ", "mask", "darker for less"],
+    ["", "bar", "how focused its attention is"],
+    ["", "image", "hover to see tags there"],
+    ["", "tag", "hover to show, click to pin"],
 ];
 
 // selectedMap() min-max normalises, so the overlay always spans exactly this
