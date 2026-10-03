@@ -36,9 +36,9 @@ const HELP_TEXT = [
     ["", "strength", "overlay strength"],
     ["", "smooth", "overlay softness"],
     ["", "view", "heatmap or mask"],
-    ["  - ", "heatmap", "red more, blue less"],
-    ["  - ", "mask", "darker for less"],
-    ["", "bar", "how focused its attention is"],
+    ["  - ", "heatmap", "red ↑, blue ↓"],
+    ["  - ", "mask", "dark ↓"],
+    ["", "bar", "attention focus"],
     ["", "image", "hover to see tags there"],
     ["", "tag", "hover to show, click to pin"],
 ];
