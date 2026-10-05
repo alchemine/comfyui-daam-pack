@@ -33,15 +33,19 @@ const MASK_ALPHA = 1.0;
 const HELP_TEXT = [
     ["", "strength", "overlay strength"],
     ["", "smooth", "overlay softness"],
-    ["", "tags", "names on the image"],
-    ["", "view", "heatmap or mask"],
+    ["", "tagging", "names on the image"],
+    ["", "mode", "heatmap or mask"],
     ["  - ", "heatmap", "red ↑, blue ↓"],
     ["  - ", "mask", "dark ↓"],
-    ["", "bar", "attention focus"],
+    ["", "save grid", "image grid with metadata"],
     ["", "image", "hover to see tags there"],
     ["", "tag", "hover to show, click to pin"],
-    ["", "save grid", "png file with metadata"],
 ];
+
+// Where the tagging button puts the showing tags' names, in the order it
+// cycles through: stacked at the top or bottom centre, nowhere, or each at
+// the cell where its map peaks.
+const TAGGING = ["top", "down", "off", "max"];
 
 // Saved grid: each cell's longer side at most this many pixels, which
 // keeps a sheet of many tags inside the browser's canvas limits.
@@ -349,9 +353,9 @@ class TagExplorerView {
         // 0 = raw cells, 1 = heavily smoothed; like wandb's smoothing slider,
         // it filters the values before they are coloured.
         this.smooth = 0.35;
-        // Writes each showing tag's name at its peak, so the picture says
-        // whose map it is without looking back at the list.
-        this.showTags = true;
+        // Writes the showing tags' names on the picture, so it says whose map
+        // it is without looking back at the list. One of TAGGING.
+        this.tagging = TAGGING[0];
         // Display position the arrow keys are on, into this.order rather
         // than into the tag axis: the list is sorted, the tags are not.
         this.cursor = -1;
@@ -487,50 +491,62 @@ class TagExplorerView {
         });
         this.panel.appendChild(smooth.row);
 
-        const buttonStyle = {
-            width: "100%",
+        const buttonRow = document.createElement("div");
+        Object.assign(buttonRow.style, {
+            display: "flex",
+            gap: "2px",
             marginBottom: "6px",
-            padding: "3px 5px",
+        });
+        this.panel.appendChild(buttonRow);
+
+        // Sized by their labels so the longest states still fit side by side.
+        const buttonStyle = {
+            flex: "1 1 auto",
+            padding: "3px 0",
+            whiteSpace: "nowrap",
+            fontSize: "10px",
             background: "#2a2a2a",
             color: "#aaa",
             border: "1px solid #3a3a3a",
             borderRadius: "3px",
             cursor: "pointer",
-            font: "inherit",
+            fontFamily: "inherit",
         };
 
-        const tagsButton = document.createElement("button");
-        Object.assign(tagsButton.style, buttonStyle);
-        const paintTags = () => {
-            tagsButton.textContent = this.showTags ? "tags: on" : "tags: off";
+        const taggingButton = document.createElement("button");
+        Object.assign(taggingButton.style, buttonStyle);
+        const paintTagging = () => {
+            taggingButton.textContent = `tagging: ${this.tagging}`;
+            taggingButton.title =
+                "where the names go: top or bottom centre, nowhere, or each at its map's peak";
         };
-        paintTags();
-        tagsButton.addEventListener("click", () => {
-            this.showTags = !this.showTags;
-            paintTags();
+        paintTagging();
+        taggingButton.addEventListener("click", () => {
+            this.tagging = TAGGING[(TAGGING.indexOf(this.tagging) + 1) % TAGGING.length];
+            paintTagging();
             this.draw();
         });
-        tagsButton.addEventListener("pointerdown", (e) => e.stopPropagation());
-        this.panel.appendChild(tagsButton);
+        taggingButton.addEventListener("pointerdown", (e) => e.stopPropagation());
+        buttonRow.appendChild(taggingButton);
 
-        const viewButton = document.createElement("button");
-        Object.assign(viewButton.style, buttonStyle);
-        const paintView = () => {
-            viewButton.textContent = this.mask ? "view: mask" : "view: heatmap";
-            viewButton.title = this.mask
+        const modeButton = document.createElement("button");
+        Object.assign(modeButton.style, buttonStyle);
+        const paintMode = () => {
+            modeButton.textContent = this.mask ? "mode: mask" : "mode: heatmap";
+            modeButton.title = this.mask
                 ? "the map dims the picture instead of colouring it; click for the jet overlay"
                 : "jet colours over the picture; click to let the map dim the picture instead";
         };
-        paintView();
-        viewButton.addEventListener("click", () => {
+        paintMode();
+        modeButton.addEventListener("click", () => {
             this.mask = !this.mask;
             this.alpha = this.alphaFor[this.mask ? "mask" : "heatmap"];
             strength.set(this.alpha);
-            paintView();
+            paintMode();
             this.draw();
         });
-        viewButton.addEventListener("pointerdown", (e) => e.stopPropagation());
-        this.panel.appendChild(viewButton);
+        modeButton.addEventListener("pointerdown", (e) => e.stopPropagation());
+        buttonRow.appendChild(modeButton);
 
         const saveButton = document.createElement("button");
         Object.assign(saveButton.style, buttonStyle);
@@ -539,7 +555,7 @@ class TagExplorerView {
             "download the tags the list shows as one grid png; the file also carries every tag's map, score and the render";
         saveButton.addEventListener("click", () => this.saveGrid());
         saveButton.addEventListener("pointerdown", (e) => e.stopPropagation());
-        this.panel.appendChild(saveButton);
+        buttonRow.appendChild(saveButton);
 
         this.search = document.createElement("input");
         this.search.type = "text";
@@ -1064,7 +1080,7 @@ class TagExplorerView {
         return this.preview === null ? this.selected : new Set([this.preview]);
     }
 
-    /** Each showing tag's name, centred on the cell where its map peaks. */
+    /** The showing tags' names, placed as this.tagging says. */
     drawTagNames(ctx, width, height, showing) {
         const [, rows, cols] = this.shape;
         const plane = rows * cols;
@@ -1076,6 +1092,21 @@ class TagExplorerView {
         ctx.lineWidth = fontSize / 4;
         ctx.strokeStyle = "#000";
         ctx.fillStyle = "#fff";
+
+        if (this.tagging !== "max") {
+            // One name per line, stacked down from the top or up from the
+            // bottom, centred.
+            const names = [...showing].map((index) => this.tags[index]);
+            const line = fontSize * 1.3;
+            names.forEach((name, n) => {
+                const y = this.tagging === "top"
+                    ? fontSize + n * line
+                    : height - fontSize - (names.length - 1 - n) * line;
+                ctx.strokeText(name, width / 2, y);
+                ctx.fillText(name, width / 2, y);
+            });
+            return;
+        }
 
         for (const index of showing) {
             const base = index * plane;
@@ -1169,7 +1200,7 @@ class TagExplorerView {
         ctx.globalAlpha = 1;
         ctx.imageSmoothingEnabled = true;
 
-        if (this.showTags) this.drawTagNames(ctx, width, height, showing);
+        if (this.tagging !== "off") this.drawTagNames(ctx, width, height, showing);
 
         return composed;
     }
