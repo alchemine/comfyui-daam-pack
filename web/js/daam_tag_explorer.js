@@ -389,8 +389,10 @@ class TagExplorerView {
         Object.assign(this.panel.style, {
             flex: "0 0 210px",
             alignSelf: "stretch",
-            overflowY: "auto",
-            overflowX: "hidden",
+            // Only the tag list scrolls; the controls above it stay put.
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
             background: "#1a1a1a",
             border: "1px solid #333",
             borderRadius: "4px",
@@ -490,6 +492,12 @@ class TagExplorerView {
         this.panel.appendChild(this.search);
 
         this.list = document.createElement("div");
+        Object.assign(this.list.style, {
+            flex: "1 1 auto",
+            minHeight: "0",
+            overflowY: "auto",
+            overflowX: "hidden",
+        });
         this.panel.appendChild(this.list);
 
         container.appendChild(canvasWrap);
