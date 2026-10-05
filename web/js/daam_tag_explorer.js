@@ -40,14 +40,60 @@ const HELP_TEXT = [
     ["", "bar", "attention focus"],
     ["", "image", "hover to see tags there"],
     ["", "tag", "hover to show, click to pin"],
-    ["", "save", "shown tags as one png"],
+    ["", "save grid", "png file with metadata"],
 ];
 
-// Saved grid: each cell's longer side at most this many pixels, which keeps
-// a sheet of many tags inside the browser's canvas limits.
+// Saved grid: each cell's longer side at most this many pixels, which
+// keeps a sheet of many tags inside the browser's canvas limits.
 const SAVE_CELL_MAX = 512;
 // Height of the name strip above each cell.
 const SAVE_LABEL_HEIGHT = 24;
+// Keyword of the PNG text chunk that carries the tags, scores, maps and render.
+const SAVE_KEYWORD = "daam";
+
+// CRC-32 of PNG chunks (ISO 3309), one entry per byte value.
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+});
+
+function crc32(bytes) {
+    let c = 0xffffffff;
+    for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+}
+
+/** `png` with an uncompressed iTXt chunk of `text` inserted before IEND. */
+function withTextChunk(png, keyword, text) {
+    const encoder = new TextEncoder();
+    const name = encoder.encode(keyword);
+    const body = encoder.encode(text);
+    // keyword, NUL, compression flag and method, empty language and
+    // translated keyword each ended by NUL, then the text.
+    const chunk = new Uint8Array(12 + name.length + 5 + body.length);
+    const view = new DataView(chunk.buffer);
+    view.setUint32(0, chunk.length - 12);
+    chunk.set(encoder.encode("iTXt"), 4);
+    chunk.set(name, 8);
+    chunk.set(body, 8 + name.length + 5);
+    view.setUint32(chunk.length - 4, crc32(chunk.subarray(4, chunk.length - 4)));
+
+    // IEND is always the last 12 bytes.
+    const out = new Uint8Array(png.length + chunk.length);
+    out.set(png.subarray(0, png.length - 12));
+    out.set(chunk, png.length - 12);
+    out.set(png.subarray(png.length - 12), png.length - 12 + chunk.length);
+    return out;
+}
+
+function toBase64(bytes) {
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(binary);
+}
 
 // selectedMap() min-max normalises, so the overlay always spans exactly this
 // range and the colour bar can label its ends with fixed numbers.
@@ -488,8 +534,9 @@ class TagExplorerView {
 
         const saveButton = document.createElement("button");
         Object.assign(saveButton.style, buttonStyle);
-        saveButton.textContent = "save";
-        saveButton.title = "download the tags the list shows as one grid png";
+        saveButton.textContent = "save grid";
+        saveButton.title =
+            "download the tags the list shows as one grid png; the file also carries every tag's map, score and the render";
         saveButton.addEventListener("click", () => this.saveGrid());
         saveButton.addEventListener("pointerdown", (e) => e.stopPropagation());
         this.panel.appendChild(saveButton);
@@ -1127,7 +1174,14 @@ class TagExplorerView {
         return composed;
     }
 
-    /** Every tag the list shows, one cell each, as one PNG near a square. */
+    /** Every tag the list shows, one cell each, as one PNG near a square.
+     *
+     * The PNG also carries, in an iTXt chunk keyed SAVE_KEYWORD, a JSON
+     * object with every tag (not only the shown ones), its bar score, the
+     * maps as they came from the node (float32, little endian, base64, shape
+     * [tags, rows, cols]) and the render itself as a base64 PNG, so the file
+     * alone is enough to look at the maps again.
+     */
     saveGrid() {
         if (!this.image || !this.order.length) return;
 
@@ -1170,9 +1224,24 @@ class TagExplorerView {
             );
         });
 
-        sheet.toBlob((blob) => {
+        const render = document.createElement("canvas");
+        render.width = width;
+        render.height = height;
+        render.getContext("2d").drawImage(this.image, 0, 0);
+        const data = JSON.stringify({
+            tags: this.tags,
+            scores: this.structure,
+            shown: this.order,
+            shape: this.shape,
+            maps: toBase64(new Uint8Array(this.maps.buffer, this.maps.byteOffset, this.maps.byteLength)),
+            image: render.toDataURL("image/png").split(",")[1],
+        });
+
+        sheet.toBlob(async (blob) => {
+            const png = new Uint8Array(await blob.arrayBuffer());
+            const file = new Blob([withTextChunk(png, SAVE_KEYWORD, data)], { type: "image/png" });
             const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
+            link.href = URL.createObjectURL(file);
             link.download = "daam-tags.png";
             link.click();
             URL.revokeObjectURL(link.href);
