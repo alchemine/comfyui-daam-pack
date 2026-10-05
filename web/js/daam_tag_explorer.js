@@ -35,6 +35,7 @@ const MASK_ALPHA = 1.0;
 const HELP_TEXT = [
     ["", "strength", "overlay strength"],
     ["", "smooth", "overlay softness"],
+    ["", "tags", "names on the image"],
     ["", "view", "heatmap or mask"],
     ["  - ", "heatmap", "red ↑, blue ↓"],
     ["  - ", "mask", "dark ↓"],
@@ -283,6 +284,9 @@ class TagExplorerView {
         // 0 = raw cells, 1 = heavily smoothed; like wandb's smoothing slider,
         // it filters the values before they are coloured.
         this.smooth = 0.35;
+        // Writes each showing tag's name at its peak, so the picture says
+        // whose map it is without looking back at the list.
+        this.showTags = true;
         // Display position the arrow keys are on, into this.order rather
         // than into the tag axis: the list is sorted, the tags are not.
         this.cursor = -1;
@@ -416,8 +420,7 @@ class TagExplorerView {
         });
         this.panel.appendChild(smooth.row);
 
-        const viewButton = document.createElement("button");
-        Object.assign(viewButton.style, {
+        const buttonStyle = {
             width: "100%",
             marginBottom: "6px",
             padding: "3px 5px",
@@ -427,7 +430,24 @@ class TagExplorerView {
             borderRadius: "3px",
             cursor: "pointer",
             font: "inherit",
+        };
+
+        const tagsButton = document.createElement("button");
+        Object.assign(tagsButton.style, buttonStyle);
+        const paintTags = () => {
+            tagsButton.textContent = this.showTags ? "tags: on" : "tags: off";
+        };
+        paintTags();
+        tagsButton.addEventListener("click", () => {
+            this.showTags = !this.showTags;
+            paintTags();
+            this.draw();
         });
+        tagsButton.addEventListener("pointerdown", (e) => e.stopPropagation());
+        this.panel.appendChild(tagsButton);
+
+        const viewButton = document.createElement("button");
+        Object.assign(viewButton.style, buttonStyle);
         const paintView = () => {
             viewButton.textContent = this.mask ? "view: mask" : "view: heatmap";
             viewButton.title = this.mask
@@ -928,9 +948,7 @@ class TagExplorerView {
     selectedMap() {
         if (!this.normalized || !this.shape) return null;
 
-        const showing = this.preview === null
-            ? this.selected
-            : new Set([this.preview]);
+        const showing = this.showingTags();
         if (showing.size === 0) return null;
 
         const [, rows, cols] = this.shape;
@@ -958,6 +976,38 @@ class TagExplorerView {
         }
 
         return out;
+    }
+
+    showingTags() {
+        return this.preview === null ? this.selected : new Set([this.preview]);
+    }
+
+    /** Each showing tag's name, centred on the cell where its map peaks. */
+    drawTagNames(ctx, width, height) {
+        const [, rows, cols] = this.shape;
+        const plane = rows * cols;
+        const fontSize = Math.max(12, Math.round(width / 40));
+        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = fontSize / 4;
+        ctx.strokeStyle = "#000";
+        ctx.fillStyle = "#fff";
+
+        for (const index of this.showingTags()) {
+            const base = index * plane;
+            let peak = 0;
+            for (let i = 1; i < plane; i++) {
+                if (this.normalized[base + i] > this.normalized[base + peak]) peak = i;
+            }
+            // Kept inside the picture when the peak sits at an edge.
+            const half = ctx.measureText(this.tags[index]).width / 2 + ctx.lineWidth;
+            const x = Math.min(Math.max(((peak % cols) + 0.5) * width / cols, half), width - half);
+            const y = Math.min(Math.max((Math.floor(peak / cols) + 0.5) * height / rows, fontSize), height - fontSize);
+            ctx.strokeText(this.tags[index], x, y);
+            ctx.fillText(this.tags[index], x, y);
+        }
     }
 
     draw() {
@@ -1032,6 +1082,8 @@ class TagExplorerView {
         ctx.drawImage(small, 0, 0, width, height);
         ctx.globalAlpha = 1;
         ctx.imageSmoothingEnabled = true;
+
+        if (this.showTags) this.drawTagNames(ctx, width, height);
 
         this.present();
     }
