@@ -36,6 +36,8 @@ With the pointer off the image, the bars turn into a 0-to-1 score for **whether 
 
 ## Example
 
+![Image](workflows/comfyui-daam-pack-image.png)
+
 ![Workflow](workflows/comfyui-daam-pack-workflow.png)
 
 ## Installation
