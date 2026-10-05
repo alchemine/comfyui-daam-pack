@@ -37,3 +37,10 @@ def test_background_scores_yellow(daam):
 
 def test_background_scores_above_spread(daam):
     assert score(daam, background()) > score(daam, spread())
+
+
+def test_object_at_one_edge_is_not_a_pile(daam):
+    # Like a fireplace cut by the right edge: high on a stretch of one side
+    # and carrying on inward, unlike a pile in the corners or all round.
+    noise = 0.05 * np.random.default_rng(0).random((SIZE, SIZE))
+    assert score(daam, blob(32, SIZE - 1, 4) + noise) >= YELLOW
