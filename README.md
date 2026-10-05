@@ -31,6 +31,7 @@ With the pointer off the image, the bars turn into a 0-to-1 score for **whether 
 | `smooth` | Blurs the map before it is drawn. 0 shows the raw attention cells |
 | `view: heatmap` | Jet colours over the image, 0 to 1 on the colorbar |
 | `view: mask` | The map becomes the image's visibility instead: what the tag looked at stays lit, the rest goes dark |
+| `save` | Downloads the tags the list shows as one PNG grid, each cell drawn as on screen with the tag's name and score. The column count keeps the grid closest to square |
 
 ## Example
 
