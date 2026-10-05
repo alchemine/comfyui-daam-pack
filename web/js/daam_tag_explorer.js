@@ -11,14 +11,12 @@ const SCORE_HIGH_COLOR = "#6ab0ff";
 const SCORE_MID_COLOR = "#e8c14a";
 const SCORE_LOW_COLOR = "#8a8a8a";
 
-// The node scores each tag 0..1 against fixed floors, not against the other
-// tags, so these cuts mean the same thing in every render: a prompt where
-// nothing goes blue really did build nothing. Roughly a third blue and a
-// fifth grey on the renders the floors were calibrated on, but nothing
-// forces that -- which is the difference from ranking tags against
-// each other.
-const LANDED_CLEAR = 0.5;
-const LANDED_AT_ALL = 0;
+// The node scores each tag's map shape 0..1 on its own, not against the other
+// tags, so these cuts mean the same thing in every render. Blue is a narrow
+// region on a flat rest, yellow a wide one, grey a map spread all over or
+// piled on the border.
+const LANDED_CLEAR = 0.75;
+const LANDED_AT_ALL = 0.5;
 
 // A jet colour map blended over the image at a constant alpha: no opacity
 // ramp, no grey base, so the picture stays visible underneath while the
@@ -946,7 +944,7 @@ class TagExplorerView {
 
             const color = z >= LANDED_CLEAR
                 ? SCORE_HIGH_COLOR
-                : z > LANDED_AT_ALL ? SCORE_MID_COLOR : SCORE_LOW_COLOR;
+                : z >= LANDED_AT_ALL ? SCORE_MID_COLOR : SCORE_LOW_COLOR;
 
             bar.style.width = `${Math.min(100, Math.max(0, z) * 100)}%`;
             bar.style.background = color;

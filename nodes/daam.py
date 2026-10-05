@@ -205,68 +205,37 @@ def _split_diagnostics(clip, tokens: dict) -> str:
 #################################################################
 # Structure scores
 #################################################################
-# Whether a tag's heat map has a shape at all: red that stands out of a blue
-# background instead of being sprinkled over the picture. The map is stretched
-# to 0..1 and cells below half are dropped, so the faint background does not
-# count; what is left falls into islands of touching cells. How gathered the red
-# is reads as one minus the entropy of the islands' summed values, normalized by
-# the entropy of every red cell standing alone: one island scores 1 however
-# large it is. When more than half the map counts, the red is the background
-# rather than a shape standing out of it, and that reading is turned over. It
-# is then weighed by one minus the map's mean, so a map that is bright all over
-# scores low. The outer tenth of each side is left out: attention piles up near
-# the corners of many maps whatever the tag, the patch side twin of a token sink.
+# Whether a tag's heat map has a shape: a few cells that stand out of a flat,
+# low rest. The map is stretched to 0..1, and the score multiplies two parts:
+# - One minus the median of the map inside the border band. A narrow red region
+#   leaves the median near 0 and scores near 1; a wide one lifts it a little;
+#   a map that is mid to high all over lifts it the most.
+# - One minus the share of the map's high values that lies on the border band.
+#   Attention piles up along the edges of many maps whatever the tag, the patch
+#   side twin of a token sink, so a map whose red sits there scores near 0.
 
-# Fraction of each side left out before scoring.
-EDGE_CUT = 0.1
-# Fraction of the map's range a cell must reach to count.
-RED_LEVEL = 0.5
-
-NEIGHBOURS = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+# Width of the border band, as a fraction of the shorter side.
+BORDER = 0.08
+# Power the map is raised to before measuring where its high values lie.
+HIGH_POWER = 4
 
 
-def _island_sums(level: np.ndarray) -> list:
-    """Summed value of each island of touching nonzero cells."""
-    rows, cols = level.shape
-    seen = level == 0
-    sums = []
-    for start in zip(*np.nonzero(~seen)):
-        if seen[start]:
-            continue
-        seen[start] = True
-        stack, total = [start], 0.0
-        while stack:
-            y, x = stack.pop()
-            total += level[y, x]
-            for dy, dx in NEIGHBOURS:
-                cell = (y + dy, x + dx)
-                if 0 <= cell[0] < rows and 0 <= cell[1] < cols and not seen[cell]:
-                    seen[cell] = True
-                    stack.append(cell)
-        sums.append(total)
-    return sums
-
-
-def _gathered(heat: np.ndarray) -> float:
-    """How gathered the red of the map's inner part is, as 0..1."""
+def _structure(heat: np.ndarray) -> float:
+    """How narrow and off the border the red of the map is, as 0..1."""
     rows, cols = heat.shape
-    dy, dx = int(rows * EDGE_CUT), int(cols * EDGE_CUT)
-    inner = heat[dy : rows - dy, dx : cols - dx]
-    level = (inner - inner.min()) / (inner.max() - inner.min() + 1e-12)
-    red_background = np.median(level) >= RED_LEVEL
-    brightness = level.mean()
-    level[level < RED_LEVEL] = 0
-    p = np.array(_island_sums(level))
-    p = p / p.sum()
-    red_cells = np.count_nonzero(level)
-    entropy = -(p * np.log(p)).sum() / np.log(red_cells) if red_cells > 1 else 0.0
-    gathered = entropy if red_background else 1 - entropy
-    return float(gathered * (1 - brightness))
+    level = (heat - heat.min()) / (heat.max() - heat.min() + 1e-12)
+    width = max(1, round(min(rows, cols) * BORDER))
+    border = np.zeros((rows, cols), dtype=bool)
+    border[:width] = border[-width:] = True
+    border[:, :width] = border[:, -width:] = True
+    high = level**HIGH_POWER
+    on_border = high[border].sum() / high.sum()
+    return float((1 - np.median(level[~border])) * (1 - on_border))
 
 
 def structure_scores(stacked: np.ndarray) -> list:
     """Per tag: did this tag give the picture a shape, as 0..1."""
-    return [_gathered(heat) for heat in stacked]
+    return [_structure(heat) for heat in stacked]
 
 
 #################################################################

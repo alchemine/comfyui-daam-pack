@@ -23,7 +23,7 @@ Everything happens inside the **DAAM Tag Explorer** node, between the image on t
 | **Click a tag** | Pins it. Click more to pin several — they show at once, each at its own scale |
 | **Arrow keys** | Walk the list. `Enter` / `Space` pins, `Escape` clears |
 
-With the pointer off the image, the bars turn into a 0-to-1 score for **whether the tag's attention gathers in one place**: red that forms a few islands on a blue background scores high however large the islands are, while red sprinkled over the picture or spread over most of it scores low. The scale is fixed rather than relative to the other tags, so a prompt where nothing scores high really did build nothing. Rows are sorted by it.
+With the pointer off the image, the bars turn into a 0-to-1 score for **whether the tag's map has a shape**. A narrow red region on a flat blue rest scores highest, a wide one a little lower, a map spread over the whole picture lower still, and a map whose red sits along the border, where attention piles up whatever the tag, lowest. The scale is fixed rather than relative to the other tags. Rows are sorted by it.
 
 | Control | What it does |
 |---------|--------------|
