@@ -205,32 +205,124 @@ def _split_diagnostics(clip, tokens: dict) -> str:
 #################################################################
 # Structure scores
 #################################################################
-# Whether a tag's heat map has a shape: a few cells that stand out of a flat,
-# low rest. The map is stretched to 0..1, and the score multiplies two parts:
-# - One minus the median of the map inside the border band. A narrow red region
-#   leaves the median near 0 and scores near 1; a wide one lifts it a little;
-#   a map that is mid to high all over lifts it the most.
-# - One minus the share of the map's high values that lies on the border band.
-#   Attention piles up along the edges of many maps whatever the tag, the patch
-#   side twin of a token sink, so a map whose red sits there scores near 0.
+# Whether a tag's heat map has a shape: a region that stands out of a flat, low
+# rest, away from the border. The score multiplies four parts. The first three
+# look at the cells inside the border band, stretched to 0..1 from their
+# FLOOR_PERCENTILE to their top and clipped: a few corner cells soaking up
+# attention, the patch side twin of a token sink, would otherwise set the top
+# of the scale and squash the shape, and a flat rest that sits a little above
+# the lowest cell would otherwise count as mid level.
+# - One minus the share of cells at mid level. A map split into a high and a
+#   low layer has few of them, however large its high region; a map that is
+#   mid to high all over is made of them.
+# - One minus the area of the high region, divided by HIGH_AREA_WEIGHT, so a
+#   narrow region scores a little above a wide one.
+# - One minus how scattered the high region is: the entropy of its islands'
+#   sizes, normalized by the entropy of every high cell standing alone and
+#   weighed by SCATTER_WEIGHT. One island, or a few large ones, barely count;
+#   specks all over the picture do.
+# - One minus how much of the high values piles up on the border band.
+#   This one is measured on the map stretched by its whole range, so the
+#   clipped cells still count. A pile ends at the band; a background or an
+#   object at the edge carries on into the ring just inside it, so the band's
+#   share counts only as far as the ring falls short of the band. A pile also
+#   sits in the corners or runs along much of the band, while an object cut by
+#   the edge, such as a fireplace at one side, fills only a stretch of one
+#   side; so the penalty is scaled by the corners' share of the band's high
+#   values plus the share of band cells above half, reaching full strength at
+#   PILE_SPREAD.
 
 # Width of the border band, as a fraction of the shorter side.
 BORDER = 0.08
 # Power the map is raised to before measuring where its high values lie.
 HIGH_POWER = 4
+# Fraction of each side that makes up a corner.
+CORNER = 0.15
+# Corner share plus band coverage at which a border pile counts in full.
+PILE_SPREAD = 0.3
+# Percentile of the inner cells that is stretched to 0.
+FLOOR_PERCENTILE = 10
+# Levels between which a cell counts as mid level.
+MID_LEVELS = (0.25, 0.75)
+# The high region's area is divided by this before it lowers the score.
+HIGH_AREA_WEIGHT = 4
+# How much a fully scattered high region lowers the score.
+SCATTER_WEIGHT = 0.5
+
+NEIGHBOURS = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+
+
+def _frame(rows: int, cols: int, width: int) -> np.ndarray:
+    """Cells within `width` of the map's edge."""
+    frame = np.zeros((rows, cols), dtype=bool)
+    frame[:width] = frame[-width:] = True
+    frame[:, :width] = frame[:, -width:] = True
+    return frame
+
+
+def _island_sizes(cells: np.ndarray) -> list:
+    """Cell count of each island of touching True cells."""
+    rows, cols = cells.shape
+    seen = ~cells
+    sizes = []
+    for start in zip(*np.nonzero(cells)):
+        if seen[start]:
+            continue
+        seen[start] = True
+        stack, size = [start], 0
+        while stack:
+            y, x = stack.pop()
+            size += 1
+            for dy, dx in NEIGHBOURS:
+                cell = (y + dy, x + dx)
+                if 0 <= cell[0] < rows and 0 <= cell[1] < cols and not seen[cell]:
+                    seen[cell] = True
+                    stack.append(cell)
+        sizes.append(size)
+    return sizes
 
 
 def _structure(heat: np.ndarray) -> float:
-    """How narrow and off the border the red of the map is, as 0..1."""
+    """How cleanly and off the border the map's red stands out, as 0..1."""
     rows, cols = heat.shape
-    level = (heat - heat.min()) / (heat.max() - heat.min() + 1e-12)
     width = max(1, round(min(rows, cols) * BORDER))
-    border = np.zeros((rows, cols), dtype=bool)
-    border[:width] = border[-width:] = True
-    border[:, :width] = border[:, -width:] = True
-    high = level**HIGH_POWER
+    border = _frame(rows, cols, width)
+    ring = _frame(rows, cols, 2 * width) & ~border
+
+    whole = (heat - heat.min()) / (heat.max() - heat.min() + 1e-12)
+    high = whole**HIGH_POWER
     on_border = high[border].sum() / high.sum()
-    return float((1 - np.median(level[~border])) * (1 - on_border))
+    carried_on = min(1.0, high[ring].mean() / (high[border].mean() + 1e-12))
+    corner_rows, corner_cols = round(rows * CORNER), round(cols * CORNER)
+    corners = np.zeros((rows, cols), dtype=bool)
+    for ys in (slice(0, corner_rows), slice(rows - corner_rows, rows)):
+        for xs in (slice(0, corner_cols), slice(cols - corner_cols, cols)):
+            corners[ys, xs] = True
+    in_corners = high[corners & border].sum() / (high[border].sum() + 1e-12)
+    covered = (whole[border] > 0.5).mean()
+    spread = min(1.0, (in_corners + covered) / PILE_SPREAD)
+    pile = on_border * (1 - carried_on) * spread
+
+    floor = np.percentile(heat[~border], FLOOR_PERCENTILE)
+    top = heat[~border].max()
+    level = np.clip((heat - floor) / (top - floor + 1e-12), 0, 1)
+    inner = level[~border]
+    mid_low, mid_top = MID_LEVELS
+    mid = ((inner > mid_low) & (inner < mid_top)).mean()
+    area = (inner > 0.5).mean()
+
+    sizes = np.array(_island_sizes((level > 0.5) & ~border))
+    scatter = 0.0
+    if len(sizes) > 1:
+        p = sizes / sizes.sum()
+        scatter = -(p * np.log(p)).sum() / np.log(sizes.sum())
+
+    return float(
+        (1 - mid)
+        * (1 - area / HIGH_AREA_WEIGHT)
+        * (1 - SCATTER_WEIGHT * scatter)
+        * (1 - pile)
+    )
 
 
 def structure_scores(stacked: np.ndarray) -> list:
