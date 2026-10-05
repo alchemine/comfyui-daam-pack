@@ -42,7 +42,14 @@ const HELP_TEXT = [
     ["", "bar", "attention focus"],
     ["", "image", "hover to see tags there"],
     ["", "tag", "hover to show, click to pin"],
+    ["", "save", "shown tags as one png"],
 ];
+
+// Saved grid: each cell's longer side at most this many pixels, which keeps
+// a sheet of many tags inside the browser's canvas limits.
+const SAVE_CELL_MAX = 512;
+// Height of the name strip above each cell.
+const SAVE_LABEL_HEIGHT = 24;
 
 // selectedMap() min-max normalises, so the overlay always spans exactly this
 // range and the colour bar can label its ends with fixed numbers.
@@ -466,6 +473,14 @@ class TagExplorerView {
         });
         viewButton.addEventListener("pointerdown", (e) => e.stopPropagation());
         this.panel.appendChild(viewButton);
+
+        const saveButton = document.createElement("button");
+        Object.assign(saveButton.style, buttonStyle);
+        saveButton.textContent = "save";
+        saveButton.title = "download the tags the list shows as one grid png";
+        saveButton.addEventListener("click", () => this.saveGrid());
+        saveButton.addEventListener("pointerdown", (e) => e.stopPropagation());
+        this.panel.appendChild(saveButton);
 
         this.search = document.createElement("input");
         this.search.type = "text";
@@ -953,10 +968,8 @@ class TagExplorerView {
      * The pointer wins over the pinned selection while it is on a row, so
      * running down the list plays the tags back one after another.
      */
-    selectedMap() {
+    selectedMap(showing) {
         if (!this.normalized || !this.shape) return null;
-
-        const showing = this.showingTags();
         if (showing.size === 0) return null;
 
         const [, rows, cols] = this.shape;
@@ -991,7 +1004,7 @@ class TagExplorerView {
     }
 
     /** Each showing tag's name, centred on the cell where its map peaks. */
-    drawTagNames(ctx, width, height) {
+    drawTagNames(ctx, width, height, showing) {
         const [, rows, cols] = this.shape;
         const plane = rows * cols;
         const fontSize = Math.max(12, Math.round(width / 40));
@@ -1003,7 +1016,7 @@ class TagExplorerView {
         ctx.strokeStyle = "#000";
         ctx.fillStyle = "#fff";
 
-        for (const index of this.showingTags()) {
+        for (const index of showing) {
             const base = index * plane;
             let peak = 0;
             for (let i = 1; i < plane; i++) {
@@ -1021,28 +1034,31 @@ class TagExplorerView {
     draw() {
         if (!this.image) return;
 
-        const { width, height } = this.image;
-        this.canvas.width = width;
-        this.canvas.height = height;
+        this.canvas.width = this.image.width;
+        this.canvas.height = this.image.height;
 
         this.fitCanvas();
 
         // Compose into an offscreen canvas so a redraw is one blit, instead
         // of redoing the bicubic upsample every time.
-        this.composed = document.createElement("canvas");
-        this.composed.width = width;
-        this.composed.height = height;
-        const ctx = this.composed.getContext("2d");
+        this.composed = this.compose(this.showingTags());
+        this.present();
+    }
 
-        const map = this.selectedMap();
+    /** The render with the maps of `showing` laid over it, at full size. */
+    compose(showing) {
+        const { width, height } = this.image;
+        const composed = document.createElement("canvas");
+        composed.width = width;
+        composed.height = height;
+        const ctx = composed.getContext("2d");
+
+        const map = this.selectedMap(showing);
 
         ctx.globalAlpha = 1;
         ctx.drawImage(this.image, 0, 0, width, height);
 
-        if (!map || !this.shape) {
-            this.present();
-            return;
-        }
+        if (!map || !this.shape) return composed;
 
         const [, rows, cols] = this.shape;
         // Bicubic first when smoothing: the canvas itself can only interpolate
@@ -1091,9 +1107,61 @@ class TagExplorerView {
         ctx.globalAlpha = 1;
         ctx.imageSmoothingEnabled = true;
 
-        if (this.showTags) this.drawTagNames(ctx, width, height);
+        if (this.showTags) this.drawTagNames(ctx, width, height, showing);
 
-        this.present();
+        return composed;
+    }
+
+    /** Every tag the list shows, one cell each, as one PNG near a square. */
+    saveGrid() {
+        if (!this.image || !this.order.length) return;
+
+        const { width, height } = this.image;
+        const scale = Math.min(1, SAVE_CELL_MAX / Math.max(width, height));
+        const cellWidth = Math.round(width * scale);
+        const cellHeight = Math.round(height * scale) + SAVE_LABEL_HEIGHT;
+
+        // The column count whose sheet comes closest to square.
+        const count = this.order.length;
+        const offSquare = (cols) =>
+            Math.abs(Math.log((cols * cellWidth) / (Math.ceil(count / cols) * cellHeight)));
+        let cols = 1;
+        for (let c = 2; c <= count; c++) {
+            if (offSquare(c) < offSquare(cols)) cols = c;
+        }
+
+        const sheet = document.createElement("canvas");
+        sheet.width = cols * cellWidth;
+        sheet.height = Math.ceil(count / cols) * cellHeight;
+        const ctx = sheet.getContext("2d");
+        ctx.fillStyle = "#1a1a1a";
+        ctx.fillRect(0, 0, sheet.width, sheet.height);
+        ctx.font = `${Math.round(SAVE_LABEL_HEIGHT * 0.6)}px Inter, sans-serif`;
+        ctx.textBaseline = "middle";
+        ctx.imageSmoothingQuality = "high";
+
+        this.order.forEach((index, n) => {
+            const x = (n % cols) * cellWidth;
+            const y = Math.floor(n / cols) * cellHeight;
+            const score = this.structure[index];
+            const label = score === undefined
+                ? this.tags[index]
+                : `${this.tags[index]}  ${score.toFixed(2)}`;
+            ctx.fillStyle = "#e0e0e0";
+            ctx.fillText(label, x + 6, y + SAVE_LABEL_HEIGHT / 2, cellWidth - 12);
+            ctx.drawImage(
+                this.compose(new Set([index])),
+                x, y + SAVE_LABEL_HEIGHT, cellWidth, cellHeight - SAVE_LABEL_HEIGHT,
+            );
+        });
+
+        sheet.toBlob((blob) => {
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "daam-tags.png";
+            link.click();
+            URL.revokeObjectURL(link.href);
+        });
     }
 
     /** Blit the composition built by draw(). */
