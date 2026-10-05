@@ -158,6 +158,20 @@ function upsampleBicubic(map, rows, cols, factor) {
 // Largest smoothing radius, in attention cells, at slider = 1.
 const MAX_SMOOTH_CELLS = 1.5;
 
+// Border band left out when stretching a map to 0..1, as a fraction of the
+// shorter side; the same band as BORDER in nodes/daam.py. A few corner cells
+// soak up attention whatever the tag and would otherwise set the top of the
+// scale, squashing the real shape into the cold colours.
+const BORDER = 0.08;
+
+/** Whether cell `i` of a rows x cols map lies on the border band. */
+function onBorder(i, rows, cols) {
+    const width = Math.max(1, Math.round(Math.min(rows, cols) * BORDER));
+    const row = Math.floor(i / cols);
+    const col = i % cols;
+    return row < width || row >= rows - width || col < width || col >= cols - width;
+}
+
 /** Separable gaussian blur of a rows x cols field, sigma in output pixels. */
 function gaussianBlur(map, rows, cols, sigma) {
     if (sigma <= 0) return map;
@@ -979,10 +993,12 @@ class TagExplorerView {
             const slice = this.normalized.subarray(base, base + plane);
 
             // Normalise each tag before combining so a single high magnitude
-            // tag cannot drown out the others.
+            // tag cannot drown out the others. The range comes from inside the
+            // border band; the band itself is clipped to it.
             let min = Infinity;
             let max = -Infinity;
             for (let i = 0; i < plane; i++) {
+                if (onBorder(i, rows, cols)) continue;
                 const v = slice[i];
                 if (v < min) min = v;
                 if (v > max) max = v;
@@ -1016,9 +1032,10 @@ class TagExplorerView {
 
         for (const index of showing) {
             const base = index * plane;
-            let peak = 0;
-            for (let i = 1; i < plane; i++) {
-                if (this.normalized[base + i] > this.normalized[base + peak]) peak = i;
+            let peak = -1;
+            for (let i = 0; i < plane; i++) {
+                if (onBorder(i, rows, cols)) continue;
+                if (peak < 0 || this.normalized[base + i] > this.normalized[base + peak]) peak = i;
             }
             // Kept inside the picture when the peak sits at an edge.
             const half = ctx.measureText(this.tags[index]).width / 2 + ctx.lineWidth;
