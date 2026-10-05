@@ -29,8 +29,9 @@ With the pointer off the image, the bars turn into a 0-to-1 score for **whether 
 |---------|--------------|
 | `strength` | How strongly the map is applied. 0 leaves the render untouched |
 | `smooth` | Blurs the map before it is drawn. 0 shows the raw attention cells |
-| `view: heatmap` | Jet colours over the image, 0 to 1 on the colorbar |
-| `view: mask` | The map becomes the image's visibility instead: what the tag looked at stays lit, the rest goes dark |
+| `tagging` | Where the shown tags' names go on the image: `top` and `down` stack them at the top or bottom centre, `off` hides them, `max` puts each at its map's peak |
+| `mode: heatmap` | Jet colours over the image, 0 to 1 on the colorbar |
+| `mode: mask` | The map becomes the image's visibility instead: what the tag looked at stays lit, the rest goes dark |
 | `save grid` | Downloads the tags the list shows as one PNG grid, each cell drawn as on screen with the tag's name and score. The column count keeps the grid closest to square. The file also carries every tag's map, score and the render in a `daam` text chunk |
 
 ## Example
