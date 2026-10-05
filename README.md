@@ -23,16 +23,20 @@ Everything happens inside the **DAAM Tag Explorer** node, between the image on t
 | **Click a tag** | Pins it. Click more to pin several — they show at once, each at its own scale |
 | **Arrow keys** | Walk the list. `Enter` / `Space` pins, `Escape` clears |
 
-With the pointer off the image, the bars turn into a 0-to-1 score for **whether the tag's attention gathers in one place**: red that forms a few islands on a blue background scores high however large the islands are, while red sprinkled over the picture or spread over most of it scores low. The scale is fixed rather than relative to the other tags, so a prompt where nothing scores high really did build nothing. Rows are sorted by it.
+With the pointer off the image, the bars turn into a 0-to-1 score for **whether the tag's map has a shape**. A narrow red region on a flat blue rest scores highest, a wide one a little lower, a map spread over the whole picture lower still, and a map whose red sits along the border, where attention piles up whatever the tag, lowest. The scale is fixed rather than relative to the other tags. Rows are sorted by it.
 
 | Control | What it does |
 |---------|--------------|
 | `strength` | How strongly the map is applied. 0 leaves the render untouched |
 | `smooth` | Blurs the map before it is drawn. 0 shows the raw attention cells |
-| `view: heatmap` | Jet colours over the image, 0 to 1 on the colorbar |
-| `view: mask` | The map becomes the image's visibility instead: what the tag looked at stays lit, the rest goes dark |
+| `tagging` | Where the shown tags' names go on the image: `top` and `down` stack them at the top or bottom centre, `off` hides them, `max` puts each at its map's peak |
+| `mode: heatmap` | Jet colours over the image, 0 to 1 on the colorbar |
+| `mode: mask` | The map becomes the image's visibility instead: what the tag looked at stays lit, the rest goes dark |
+| `save grid` | Downloads the tags the list shows as one PNG grid, each cell drawn as on screen with the tag's name and score. The column count keeps the grid closest to square. The file also carries every tag's map, score and the render in a `daam` text chunk |
 
 ## Example
+
+![Image](workflows/comfyui-daam-pack-image.png)
 
 ![Workflow](workflows/comfyui-daam-pack-workflow.png)
 

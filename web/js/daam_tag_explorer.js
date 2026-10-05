@@ -11,14 +11,12 @@ const SCORE_HIGH_COLOR = "#6ab0ff";
 const SCORE_MID_COLOR = "#e8c14a";
 const SCORE_LOW_COLOR = "#8a8a8a";
 
-// The node scores each tag 0..1 against fixed floors, not against the other
-// tags, so these cuts mean the same thing in every render: a prompt where
-// nothing goes blue really did build nothing. Roughly a third blue and a
-// fifth grey on the renders the floors were calibrated on, but nothing
-// forces that -- which is the difference from ranking tags against
-// each other.
-const LANDED_CLEAR = 0.5;
-const LANDED_AT_ALL = 0;
+// The node scores each tag's map shape 0..1 on its own, not against the other
+// tags, so these cuts mean the same thing in every render. Blue is a narrow
+// region on a flat rest, yellow a wide one, grey a map spread all over or
+// piled on the border.
+const LANDED_CLEAR = 0.75;
+const LANDED_AT_ALL = 0.5;
 
 // A jet colour map blended over the image at a constant alpha: no opacity
 // ramp, no grey base, so the picture stays visible underneath while the
@@ -35,13 +33,71 @@ const MASK_ALPHA = 1.0;
 const HELP_TEXT = [
     ["", "strength", "overlay strength"],
     ["", "smooth", "overlay softness"],
-    ["", "view", "heatmap or mask"],
+    ["", "tagging", "names on the image"],
+    ["", "mode", "heatmap or mask"],
     ["  - ", "heatmap", "red ↑, blue ↓"],
     ["  - ", "mask", "dark ↓"],
-    ["", "bar", "attention focus"],
+    ["", "save grid", "image grid with metadata"],
     ["", "image", "hover to see tags there"],
     ["", "tag", "hover to show, click to pin"],
 ];
+
+// Where the tagging button puts the showing tags' names, in the order it
+// cycles through: stacked at the top or bottom centre, nowhere, or each at
+// the cell where its map peaks.
+const TAGGING = ["top", "down", "off", "max"];
+
+// Saved grid: each cell's longer side at most this many pixels, which
+// keeps a sheet of many tags inside the browser's canvas limits.
+const SAVE_CELL_MAX = 512;
+// Height of the name strip above each cell.
+const SAVE_LABEL_HEIGHT = 24;
+// Keyword of the PNG text chunk that carries the tags, scores, maps and render.
+const SAVE_KEYWORD = "daam";
+
+// CRC-32 of PNG chunks (ISO 3309), one entry per byte value.
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+});
+
+function crc32(bytes) {
+    let c = 0xffffffff;
+    for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+}
+
+/** `png` with an uncompressed iTXt chunk of `text` inserted before IEND. */
+function withTextChunk(png, keyword, text) {
+    const encoder = new TextEncoder();
+    const name = encoder.encode(keyword);
+    const body = encoder.encode(text);
+    // keyword, NUL, compression flag and method, empty language and
+    // translated keyword each ended by NUL, then the text.
+    const chunk = new Uint8Array(12 + name.length + 5 + body.length);
+    const view = new DataView(chunk.buffer);
+    view.setUint32(0, chunk.length - 12);
+    chunk.set(encoder.encode("iTXt"), 4);
+    chunk.set(name, 8);
+    chunk.set(body, 8 + name.length + 5);
+    view.setUint32(chunk.length - 4, crc32(chunk.subarray(4, chunk.length - 4)));
+
+    // IEND is always the last 12 bytes.
+    const out = new Uint8Array(png.length + chunk.length);
+    out.set(png.subarray(0, png.length - 12));
+    out.set(chunk, png.length - 12);
+    out.set(png.subarray(png.length - 12), png.length - 12 + chunk.length);
+    return out;
+}
+
+function toBase64(bytes) {
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(binary);
+}
 
 // selectedMap() min-max normalises, so the overlay always spans exactly this
 // range and the colour bar can label its ends with fixed numbers.
@@ -151,6 +207,20 @@ function upsampleBicubic(map, rows, cols, factor) {
 
 // Largest smoothing radius, in attention cells, at slider = 1.
 const MAX_SMOOTH_CELLS = 1.5;
+
+// Border band left out when stretching a map to 0..1, as a fraction of the
+// shorter side; the same band as BORDER in nodes/daam.py. A few corner cells
+// soak up attention whatever the tag and would otherwise set the top of the
+// scale, squashing the real shape into the cold colours.
+const BORDER = 0.08;
+
+/** Whether cell `i` of a rows x cols map lies on the border band. */
+function onBorder(i, rows, cols) {
+    const width = Math.max(1, Math.round(Math.min(rows, cols) * BORDER));
+    const row = Math.floor(i / cols);
+    const col = i % cols;
+    return row < width || row >= rows - width || col < width || col >= cols - width;
+}
 
 /** Separable gaussian blur of a rows x cols field, sigma in output pixels. */
 function gaussianBlur(map, rows, cols, sigma) {
@@ -283,6 +353,9 @@ class TagExplorerView {
         // 0 = raw cells, 1 = heavily smoothed; like wandb's smoothing slider,
         // it filters the values before they are coloured.
         this.smooth = 0.35;
+        // Writes the showing tags' names on the picture, so it says whose map
+        // it is without looking back at the list. One of TAGGING.
+        this.tagging = TAGGING[0];
         // Display position the arrow keys are on, into this.order rather
         // than into the tag axis: the list is sorted, the tags are not.
         this.cursor = -1;
@@ -385,8 +458,10 @@ class TagExplorerView {
         Object.assign(this.panel.style, {
             flex: "0 0 210px",
             alignSelf: "stretch",
-            overflowY: "auto",
-            overflowX: "hidden",
+            // Only the tag list scrolls; the controls above it stay put.
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
             background: "#1a1a1a",
             border: "1px solid #333",
             borderRadius: "4px",
@@ -416,34 +491,71 @@ class TagExplorerView {
         });
         this.panel.appendChild(smooth.row);
 
-        const viewButton = document.createElement("button");
-        Object.assign(viewButton.style, {
-            width: "100%",
+        const buttonRow = document.createElement("div");
+        Object.assign(buttonRow.style, {
+            display: "flex",
+            gap: "2px",
             marginBottom: "6px",
-            padding: "3px 5px",
+        });
+        this.panel.appendChild(buttonRow);
+
+        // Sized by their labels so the longest states still fit side by side.
+        const buttonStyle = {
+            flex: "1 1 auto",
+            padding: "3px 0",
+            whiteSpace: "nowrap",
+            fontSize: "10px",
             background: "#2a2a2a",
             color: "#aaa",
             border: "1px solid #3a3a3a",
             borderRadius: "3px",
             cursor: "pointer",
-            font: "inherit",
+            fontFamily: "inherit",
+        };
+
+        const taggingButton = document.createElement("button");
+        Object.assign(taggingButton.style, buttonStyle);
+        const paintTagging = () => {
+            taggingButton.textContent = `tagging: ${this.tagging}`;
+            taggingButton.title =
+                "where the names go: top or bottom centre, nowhere, or each at its map's peak";
+        };
+        paintTagging();
+        taggingButton.addEventListener("click", () => {
+            this.tagging = TAGGING[(TAGGING.indexOf(this.tagging) + 1) % TAGGING.length];
+            paintTagging();
+            this.draw();
         });
-        const paintView = () => {
-            viewButton.textContent = this.mask ? "view: mask" : "view: heatmap";
-            viewButton.title = this.mask
+        taggingButton.addEventListener("pointerdown", (e) => e.stopPropagation());
+        buttonRow.appendChild(taggingButton);
+
+        const modeButton = document.createElement("button");
+        Object.assign(modeButton.style, buttonStyle);
+        const paintMode = () => {
+            modeButton.textContent = this.mask ? "mode: mask" : "mode: heatmap";
+            modeButton.title = this.mask
                 ? "the map dims the picture instead of colouring it; click for the jet overlay"
                 : "jet colours over the picture; click to let the map dim the picture instead";
         };
-        paintView();
-        viewButton.addEventListener("click", () => {
+        paintMode();
+        modeButton.addEventListener("click", () => {
             this.mask = !this.mask;
             this.alpha = this.alphaFor[this.mask ? "mask" : "heatmap"];
             strength.set(this.alpha);
-            paintView();
+            paintMode();
             this.draw();
         });
-        viewButton.addEventListener("pointerdown", (e) => e.stopPropagation());
-        this.panel.appendChild(viewButton);
+        modeButton.addEventListener("pointerdown", (e) => e.stopPropagation());
+        buttonRow.appendChild(modeButton);
+
+        const saveButton = document.createElement("button");
+        Object.assign(saveButton.style, buttonStyle);
+        saveButton.textContent = "save grid";
+        saveButton.title =
+            "download the tags the list shows as one grid png; the file also carries every tag's map, score and the render";
+        saveButton.addEventListener("click", () => this.saveGrid());
+        saveButton.addEventListener("pointerdown", (e) => e.stopPropagation());
+        buttonRow.appendChild(saveButton);
 
         this.search = document.createElement("input");
         this.search.type = "text";
@@ -470,6 +582,12 @@ class TagExplorerView {
         this.panel.appendChild(this.search);
 
         this.list = document.createElement("div");
+        Object.assign(this.list.style, {
+            flex: "1 1 auto",
+            minHeight: "0",
+            overflowY: "auto",
+            overflowX: "hidden",
+        });
         this.panel.appendChild(this.list);
 
         container.appendChild(canvasWrap);
@@ -903,7 +1021,7 @@ class TagExplorerView {
 
             const color = z >= LANDED_CLEAR
                 ? SCORE_HIGH_COLOR
-                : z > LANDED_AT_ALL ? SCORE_MID_COLOR : SCORE_LOW_COLOR;
+                : z >= LANDED_AT_ALL ? SCORE_MID_COLOR : SCORE_LOW_COLOR;
 
             bar.style.width = `${Math.min(100, Math.max(0, z) * 100)}%`;
             bar.style.background = color;
@@ -925,12 +1043,8 @@ class TagExplorerView {
      * The pointer wins over the pinned selection while it is on a row, so
      * running down the list plays the tags back one after another.
      */
-    selectedMap() {
+    selectedMap(showing) {
         if (!this.normalized || !this.shape) return null;
-
-        const showing = this.preview === null
-            ? this.selected
-            : new Set([this.preview]);
         if (showing.size === 0) return null;
 
         const [, rows, cols] = this.shape;
@@ -942,10 +1056,12 @@ class TagExplorerView {
             const slice = this.normalized.subarray(base, base + plane);
 
             // Normalise each tag before combining so a single high magnitude
-            // tag cannot drown out the others.
+            // tag cannot drown out the others. The range comes from inside the
+            // border band; the band itself is clipped to it.
             let min = Infinity;
             let max = -Infinity;
             for (let i = 0; i < plane; i++) {
+                if (onBorder(i, rows, cols)) continue;
                 const v = slice[i];
                 if (v < min) min = v;
                 if (v > max) max = v;
@@ -960,31 +1076,82 @@ class TagExplorerView {
         return out;
     }
 
+    showingTags() {
+        return this.preview === null ? this.selected : new Set([this.preview]);
+    }
+
+    /** The showing tags' names, placed as this.tagging says. */
+    drawTagNames(ctx, width, height, showing) {
+        const [, rows, cols] = this.shape;
+        const plane = rows * cols;
+        const fontSize = Math.max(12, Math.round(width / 40));
+        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = fontSize / 4;
+        ctx.strokeStyle = "#000";
+        ctx.fillStyle = "#fff";
+
+        if (this.tagging !== "max") {
+            // One name per line, stacked down from the top or up from the
+            // bottom, centred.
+            const names = [...showing].map((index) => this.tags[index]);
+            const line = fontSize * 1.3;
+            names.forEach((name, n) => {
+                const y = this.tagging === "top"
+                    ? fontSize + n * line
+                    : height - fontSize - (names.length - 1 - n) * line;
+                ctx.strokeText(name, width / 2, y);
+                ctx.fillText(name, width / 2, y);
+            });
+            return;
+        }
+
+        for (const index of showing) {
+            const base = index * plane;
+            let peak = -1;
+            for (let i = 0; i < plane; i++) {
+                if (onBorder(i, rows, cols)) continue;
+                if (peak < 0 || this.normalized[base + i] > this.normalized[base + peak]) peak = i;
+            }
+            // Kept inside the picture when the peak sits at an edge.
+            const half = ctx.measureText(this.tags[index]).width / 2 + ctx.lineWidth;
+            const x = Math.min(Math.max(((peak % cols) + 0.5) * width / cols, half), width - half);
+            const y = Math.min(Math.max((Math.floor(peak / cols) + 0.5) * height / rows, fontSize), height - fontSize);
+            ctx.strokeText(this.tags[index], x, y);
+            ctx.fillText(this.tags[index], x, y);
+        }
+    }
+
     draw() {
         if (!this.image) return;
 
-        const { width, height } = this.image;
-        this.canvas.width = width;
-        this.canvas.height = height;
+        this.canvas.width = this.image.width;
+        this.canvas.height = this.image.height;
 
         this.fitCanvas();
 
         // Compose into an offscreen canvas so a redraw is one blit, instead
         // of redoing the bicubic upsample every time.
-        this.composed = document.createElement("canvas");
-        this.composed.width = width;
-        this.composed.height = height;
-        const ctx = this.composed.getContext("2d");
+        this.composed = this.compose(this.showingTags());
+        this.present();
+    }
 
-        const map = this.selectedMap();
+    /** The render with the maps of `showing` laid over it, at full size. */
+    compose(showing) {
+        const { width, height } = this.image;
+        const composed = document.createElement("canvas");
+        composed.width = width;
+        composed.height = height;
+        const ctx = composed.getContext("2d");
+
+        const map = this.selectedMap(showing);
 
         ctx.globalAlpha = 1;
         ctx.drawImage(this.image, 0, 0, width, height);
 
-        if (!map || !this.shape) {
-            this.present();
-            return;
-        }
+        if (!map || !this.shape) return composed;
 
         const [, rows, cols] = this.shape;
         // Bicubic first when smoothing: the canvas itself can only interpolate
@@ -1033,7 +1200,83 @@ class TagExplorerView {
         ctx.globalAlpha = 1;
         ctx.imageSmoothingEnabled = true;
 
-        this.present();
+        if (this.tagging !== "off") this.drawTagNames(ctx, width, height, showing);
+
+        return composed;
+    }
+
+    /** Every tag the list shows, one cell each, as one PNG near a square.
+     *
+     * The PNG also carries, in an iTXt chunk keyed SAVE_KEYWORD, a JSON
+     * object with every tag (not only the shown ones), its bar score, the
+     * maps as they came from the node (float32, little endian, base64, shape
+     * [tags, rows, cols]) and the render itself as a base64 PNG, so the file
+     * alone is enough to look at the maps again.
+     */
+    saveGrid() {
+        if (!this.image || !this.order.length) return;
+
+        const { width, height } = this.image;
+        const scale = Math.min(1, SAVE_CELL_MAX / Math.max(width, height));
+        const cellWidth = Math.round(width * scale);
+        const cellHeight = Math.round(height * scale) + SAVE_LABEL_HEIGHT;
+
+        // The column count whose sheet comes closest to square.
+        const count = this.order.length;
+        const offSquare = (cols) =>
+            Math.abs(Math.log((cols * cellWidth) / (Math.ceil(count / cols) * cellHeight)));
+        let cols = 1;
+        for (let c = 2; c <= count; c++) {
+            if (offSquare(c) < offSquare(cols)) cols = c;
+        }
+
+        const sheet = document.createElement("canvas");
+        sheet.width = cols * cellWidth;
+        sheet.height = Math.ceil(count / cols) * cellHeight;
+        const ctx = sheet.getContext("2d");
+        ctx.fillStyle = "#1a1a1a";
+        ctx.fillRect(0, 0, sheet.width, sheet.height);
+        ctx.font = `${Math.round(SAVE_LABEL_HEIGHT * 0.6)}px Inter, sans-serif`;
+        ctx.textBaseline = "middle";
+        ctx.imageSmoothingQuality = "high";
+
+        this.order.forEach((index, n) => {
+            const x = (n % cols) * cellWidth;
+            const y = Math.floor(n / cols) * cellHeight;
+            const score = this.structure[index];
+            const label = score === undefined
+                ? this.tags[index]
+                : `${this.tags[index]}  ${score.toFixed(2)}`;
+            ctx.fillStyle = "#e0e0e0";
+            ctx.fillText(label, x + 6, y + SAVE_LABEL_HEIGHT / 2, cellWidth - 12);
+            ctx.drawImage(
+                this.compose(new Set([index])),
+                x, y + SAVE_LABEL_HEIGHT, cellWidth, cellHeight - SAVE_LABEL_HEIGHT,
+            );
+        });
+
+        const render = document.createElement("canvas");
+        render.width = width;
+        render.height = height;
+        render.getContext("2d").drawImage(this.image, 0, 0);
+        const data = JSON.stringify({
+            tags: this.tags,
+            scores: this.structure,
+            shown: this.order,
+            shape: this.shape,
+            maps: toBase64(new Uint8Array(this.maps.buffer, this.maps.byteOffset, this.maps.byteLength)),
+            image: render.toDataURL("image/png").split(",")[1],
+        });
+
+        sheet.toBlob(async (blob) => {
+            const png = new Uint8Array(await blob.arrayBuffer());
+            const file = new Blob([withTextChunk(png, SAVE_KEYWORD, data)], { type: "image/png" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(file);
+            link.download = "daam-tags.png";
+            link.click();
+            URL.revokeObjectURL(link.href);
+        });
     }
 
     /** Blit the composition built by draw(). */
